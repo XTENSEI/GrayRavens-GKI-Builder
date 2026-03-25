@@ -10,8 +10,8 @@ TIMEZONE="Asia/Jakarta"
 ANYKERNEL_REPO="https://github.com/ShadowbytePrjkt/GKI-anykernel"
 ANYKERNEL_BRANCH="gki"
 # Kernel Source
-KERNEL_REPO="https://github.com/ramabondanp/android_kernel_common-5.10"
-KERNEL_BRANCH="android12-5.10"
+KERNEL_REPO="https://github.com/linastorvaldz/kernel-android12-5.10"
+KERNEL_BRANCH="rebase"
 KERNEL_DEFCONFIG="gki_defconfig"
 # Release repository
 GKI_RELEASES_REPO="https://github.com/ShadowbytePrjkt/GrayRavens-X-ShadowbytePrjkt-GKI/releases"

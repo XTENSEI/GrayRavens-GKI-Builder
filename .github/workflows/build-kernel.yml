@@ -1,5 +1,4 @@
 name: Build kernel
-
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +13,10 @@ on:
         description: 'kernel branch / tag / SHA to build'
         type: string
         default: android12-5.10
+      kernel_name:
+        description: 'Kernel zip name (without .zip)'
+        type: string
+        default: GrayRavens-Zenithed
 
 jobs:
   build:
@@ -72,9 +75,24 @@ jobs:
           chmod +x build.sh
           ./build.sh
 
+      - name: Package with AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/XTENSEI/GrayRavens-anykernel anykernel
+          cp kernel/out/arch/arm64/boot/Image anykernel/Image
+          cd anykernel
+          zip -r9 "../${{ inputs.kernel_name }}-${{ inputs.ksu_variant }}.zip" . \
+            --exclude="*.git*" --exclude="README.md" --exclude="*.placeholder"
+
       - name: Upload kernel image
         uses: actions/upload-artifact@v4
         with:
           name: Image-${{ inputs.ksu_variant }}-${{ inputs.kernel_ref }}
           path: kernel/out/arch/arm64/boot/Image
+          if-no-files-found: error
+
+      - name: Upload flashable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.kernel_name }}-${{ inputs.ksu_variant }}
+          path: ${{ inputs.kernel_name }}-${{ inputs.ksu_variant }}.zip
           if-no-files-found: error

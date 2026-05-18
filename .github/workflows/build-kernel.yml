@@ -62,8 +62,11 @@ jobs:
         if: inputs.clang_variant == 'NEUTRON_19'
         run: |
           mkdir -p ~/toolchain/neutron-clang
-          bash <(curl -s https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman) \
-            --sync=19 -D ~/toolchain/neutron-clang
+          cd ~/toolchain/neutron-clang
+          curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
+          chmod +x antman
+          # 10032024 = LLVM 19.0.0git, latest Neutron build
+          ./antman -S=10032024
           echo "Neutron Clang 19 downloaded."
 
       - name: Export CLANG_PATH

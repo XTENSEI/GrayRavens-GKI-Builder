@@ -9,23 +9,24 @@ trap 'echo "Build failed at line $LINENO. Exit code: $?" >&2' ERR
 export ARCH=arm64
 export LLVM=1
 export LLVM_IAS=1
-export LLVM_VER=12.0.1
 export KBUILD_BUILD_USER="GrayRavens-Team"
 export KBUILD_BUILD_HOST="ZenithXHikari-KasumiThermal-IyashiThrottle"
 
 # ── Clang toolchain ──────────────────────────────────────────────────────────
-CLANG_PATH="${HOME}/work/android-kernel/toolchain/clang-${LLVM_VER}"
-if [ ! -d "${CLANG_PATH}" ]; then
-    echo "Clang-${LLVM_VER} not found. Downloading..."
-    mkdir -p "${CLANG_PATH}"
-    CLANG_URL="https://mirrors.edge.kernel.org/pub/tools/llvm/files/llvm-${LLVM_VER}-x86_64.tar.gz"
-    curl -L "${CLANG_URL}" | tar -xz --strip-components=1 -C "${CLANG_PATH}"
-    echo "Clang-${LLVM_VER} downloaded and extracted successfully."
+if [ -z "$CLANG_PATH" ]; then
+    echo "ERROR: CLANG_PATH is not set. Did you run this from the workflow?" >&2
+    exit 1
 fi
+
+echo "Using toolchain : ${CLANG_VARIANT:-unknown}"
+echo "Toolchain path  : $CLANG_PATH"
+echo "Clang version   : $("$CLANG_PATH/bin/clang" --version | head -n1)"
 export PATH="${CLANG_PATH}/bin:${PATH}"
 
+# ── KCFLAGS ──────────────────────────────────────────────────────────────────
+export KCFLAGS="-w -march=armv8.2-a -mtune=cortex-a55"
+
 # ── NTSYNC SELinux policy injection ─────────────────────────────────────────
-# Required for /dev/ntsync to be accessible (relabel to gpu_device context)
 RULES_FILE="drivers/kernelsu/selinux/rules.c"
 if [ -f "$RULES_FILE" ]; then
     echo "Injecting NTSYNC SELinux rules into KernelSU..."
@@ -52,8 +53,8 @@ fi
 echo "Generating GKI defconfig..."
 make O=out gki_defconfig
 
-# ── Configure LTO settings ───────────────────────────────────────────────────
-echo "Configuring LTO (Link Time Optimization)..."
+# ── Configure LTO — ThinLTO ─────────────────────────────────────────────────
+echo "Configuring ThinLTO..."
 scripts/config --file out/.config \
     -e LTO_CLANG \
     -d LTO_NONE \
@@ -69,4 +70,4 @@ make -j$(nproc --all) O=out Image
 echo "Running KMI validation..."
 python3 KMI_function_symbols_test.py
 
-echo "Build completed successfully!"
+echo "Build completed successfully! Toolchain: ${CLANG_VARIANT}"

@@ -10,8 +10,8 @@ export ARCH=arm64
 export LLVM=1
 export LLVM_IAS=1
 export PGO_INSTRUMENT=1
-export KBUILD_BUILD_USER="GrayRavens-Team"
-export KBUILD_BUILD_HOST="ZenithXHikari-KasumiXIyashi"
+export KBUILD_BUILD_USER="#Stopracist"
+export KBUILD_BUILD_HOST="JuanPrjktXiusegithubtobuildthis"
 
 # ── Clang toolchain ──────────────────────────────────────────────────────────
 if [ -z "$CLANG_PATH" ]; then

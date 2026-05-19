@@ -31,7 +31,7 @@ on:
       kernel_name:
         description: 'Kernel zip name (without .zip)'
         type: string
-        default: GrayRavens-Zenithed
+        default: NexusKernel!
 
 jobs:
   setup:

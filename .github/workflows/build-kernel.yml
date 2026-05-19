@@ -192,8 +192,8 @@ jobs:
         working-directory: kernel
         run: |
           mkdir -p out
-          make O=out gki_defconfig
-          make -j$(nproc --all) O=out
+          make ARCH=arm64 O=out gki_defconfig
+          make ARCH=arm64 -j$(nproc --all) O=out
 
       # ── PACKAGE ─────────────────────────────────────────────
       - name: Package

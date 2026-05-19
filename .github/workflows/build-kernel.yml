@@ -166,9 +166,6 @@ jobs:
       - name: Build kernel
         working-directory: kernel
         run: |
-          export ARCH=arm64
-          export LLVM=1
-          export LLVM_IAS=1
           mkdir -p out
           make O=out gki_defconfig
           make -j$(nproc --all) O=out

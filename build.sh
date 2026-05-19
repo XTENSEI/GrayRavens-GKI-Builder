@@ -7,6 +7,7 @@ trap 'echo "Build failed at line $LINENO. Exit code: $?" >&2' ERR
 
 # ── Environment setup ────────────────────────────────────────────────
 export ARCH=arm64
+export SUBARCH=arm64
 export LLVM=1
 export LLVM_IAS=1
 export PGO_INSTRUMENT=1
@@ -55,6 +56,10 @@ echo "Compiler string : $KBUILD_COMPILER_STRING"
 # ── KCFLAGS ───────────────────────────────────────────────────────────
 export KCFLAGS="-w -march=armv8.2-a -mtune=cortex-a55"
 
+# ── CLEAN BUILD (IMPORTANT FIX) ───────────────────────────────────────
+echo "Cleaning build environment..."
+rm -rf out
+
 # ── NTSYNC SELinux injection ─────────────────────────────────────────
 RULES_FILE="drivers/kernelsu/selinux/rules.c"
 
@@ -82,7 +87,11 @@ fi
 
 # ── Generate config ──────────────────────────────────────────────────
 echo "Generating GKI defconfig..."
-make O=out gki_defconfig
+make ARCH=arm64 O=out gki_defconfig
+
+# ── SAFETY CHECK (IMPORTANT) ─────────────────────────────────────────
+echo "Checking for x86 leakage..."
+grep CONFIG_X86 out/.config || echo "OK: No X86 config"
 
 # ── LTO config ───────────────────────────────────────────────────────
 echo "Configuring THIN LTO..."
@@ -93,9 +102,9 @@ scripts/config --file out/.config \
 -d LTO_CLANG_THIN \
 -e LTO_CLANG_FULL
 
-# ── Build kernel ─────────────────────────────────────────────────────
+# ── BUILD ─────────────────────────────────────────────────────────────
 echo "Building kernel..."
-make -j"$(nproc --all)" O=out V=1 Image
+make ARCH=arm64 -j"$(nproc --all)" O=out V=1 Image
 
 # ── KMI validation ───────────────────────────────────────────────────
 echo "Running KMI validation..."

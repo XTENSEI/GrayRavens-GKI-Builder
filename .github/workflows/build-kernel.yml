@@ -70,7 +70,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             bc bison flex build-essential libssl-dev libelf-dev \
             cpio kmod rsync zip patch curl ca-certificates \
-            python3 python3-pip python3-lxml git wget
+            python3 python3-pip python3-lxml git wget binutils
 
       # ── Neutron 19 ────────────────────────────────────────────────────────
       - name: Download Neutron Clang 19
@@ -84,29 +84,44 @@ jobs:
           ./antman --patch=glibc
           echo "Neutron Clang 19 ready."
 
-      # ── AOSP Clang r445002 ────────────────────────────────────────────────
-      - name: Cache AOSP Clang r445002
+      - name: Verify Neutron Clang optimizations
+        if: matrix.clang == 'NEUTRON_19'
+        run: |
+          echo "=== Clang binary BOLT check ==="
+          readelf -S ~/toolchain/neutron-clang/bin/clang \
+            | grep -i "bolt\|llvm_bb" || echo "No BOLT sections found"
+          echo "=== Clang build comment ==="
+          readelf -p .comment ~/toolchain/neutron-clang/bin/clang 2>/dev/null \
+            | head -20 || echo "No .comment section"
+          echo "=== PGO check ==="
+          strings ~/toolchain/neutron-clang/bin/clang \
+            | grep -i "profdata\|pgo\|instrumented" | head -10 \
+            || echo "No PGO strings found"
+
+      # ── AOSP Clang r416183b (LLVM 12.0.7) ────────────────────────────────
+      - name: Cache AOSP Clang r416183b
         if: matrix.clang == 'AOSP_12'
         id: cache-aosp-12
         uses: actions/cache@v4
         with:
-          path: ~/toolchain/aosp-clang-r445002
-          key: aosp-clang-r445002-x86_64
+          path: ~/toolchain/aosp-clang-r416183b
+          key: aosp-clang-r416183b-x86_64
 
-      - name: Download AOSP Clang r445002 (if not cached)
+      - name: Download AOSP Clang r416183b (if not cached)
         if: matrix.clang == 'AOSP_12' && steps.cache-aosp-12.outputs.cache-hit != 'true'
         run: |
-          git clone --depth=1 \
-            https://github.com/AOSP-12/prebuilts_clang_host_linux-x86_clang-r445002.git \
-            ~/toolchain/aosp-clang-r445002
-          echo "AOSP Clang r445002 ready."
+          mkdir -p ~/toolchain/aosp-clang-r416183b
+          curl -L \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master-kernel-build-2021/clang-r416183b.tar.gz" \
+            | tar -xz -C ~/toolchain/aosp-clang-r416183b
+          echo "AOSP Clang r416183b (LLVM 12.0.7) ready."
 
       # ── Export CLANG_PATH ─────────────────────────────────────────────────
       - name: Export CLANG_PATH
         run: |
           case "${{ matrix.clang }}" in
             NEUTRON_19) echo "CLANG_PATH=$HOME/toolchain/neutron-clang" >> $GITHUB_ENV ;;
-            AOSP_12)    echo "CLANG_PATH=$HOME/toolchain/aosp-clang-r445002" >> $GITHUB_ENV ;;
+            AOSP_12)    echo "CLANG_PATH=$HOME/toolchain/aosp-clang-r416183b" >> $GITHUB_ENV ;;
           esac
 
       # ── Kernel source ─────────────────────────────────────────────────────

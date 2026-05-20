@@ -28,7 +28,7 @@ echo "Clang version   : $("$CLANG_PATH/bin/clang" --version | head -n1)"
 if [ "${CLANG_VARIANT}" = "NEUTRON_19" ]; then
     COMPILER_STRING="Neutron Clang 19.0.0 +PGO +BOLT +Polly +ThinLTO +O3"
 elif [ "${CLANG_VARIANT}" = "AOSP_12" ]; then
-    COMPILER_STRING="AOSP Clang r445002 (LLVM 12.0.5)"
+    COMPILER_STRING="AOSP Clang r416183b (LLVM 12.0.7)"
 else
     COMPILER_STRING="$("$CLANG_PATH/bin/clang" --version | head -n1)"
 fi
@@ -79,6 +79,30 @@ echo "Building kernel image..."
 make -j$(nproc --all) O=out \
     KBUILD_COMPILER_STRING="${COMPILER_STRING}" \
     Image
+
+# ── Post-build vmlinux verification ─────────────────────────────────────────
+echo ""
+echo "=== Post-build verification ==="
+
+echo "--- Compiler used (from vmlinux .comment) ---"
+readelf -p .comment out/vmlinux 2>/dev/null \
+    | grep -v "^$\|String dump" || echo "Could not read .comment"
+
+echo "--- LTO config check ---"
+grep -E "CONFIG_LTO|CONFIG_THINLTO" out/.config || echo "No LTO configs found"
+
+echo "--- ThinLTO cache ---"
+if [ -d out/.thinlto-cache ] && [ "$(ls -A out/.thinlto-cache)" ]; then
+    echo "ThinLTO cache present — ThinLTO ran successfully"
+    ls -lah out/.thinlto-cache/ | head -5
+else
+    echo "No ThinLTO cache found"
+fi
+
+echo "--- Kernel compile.h ---"
+cat out/include/generated/compile.h 2>/dev/null || echo "compile.h not found"
+
+echo "=== Verification complete ==="
 
 # ── KMI validation ───────────────────────────────────────────────────────────
 echo "Running KMI validation..."

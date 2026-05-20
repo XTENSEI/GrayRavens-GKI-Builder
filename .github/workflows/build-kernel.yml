@@ -227,6 +227,8 @@ jobs:
           export OBJCOPY=llvm-objcopy
           export OBJDUMP=llvm-objdump
           export READELF=llvm-readelf
+          export KBUILD_BUILD_USER="JuanPrjktXiusegithubtobuildthis"
+          export KBUILD_BUILD_HOST="#StopRacist!"
 
           export LLVM=1
           export LLVM_IAS=1

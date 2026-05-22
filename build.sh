@@ -26,9 +26,13 @@ echo "Clang version   : $("$CLANG_PATH/bin/clang" --version | head -n1)"
 
 # ── Compiler string (shown in /proc/version) ─────────────────────────────────
 if [ "${CLANG_VARIANT}" = "NEUTRON-19" ]; then
-    COMPILER_STRING="Neutron Clang 19.0.0 +PGO +BOLT +Polly +ThinLTO +O3"
+    COMPILER_STRING="Neutron Clang 19.0.0 +PGO +BOLT +Polly +ThinLTO +O3 +MLGO"
 elif [ "${CLANG_VARIANT}" = "CLANG-12" ]; then
     COMPILER_STRING="AOSP Clang r416183b (LLVM 12.0.5)"
+elif [ "${CLANG_VARIANT}" = "GRAYRAVEN-19" ]; then
+    COMPILER_STRING="GrayRavens Clang 19.1.0 +PGO +BOLT +Polly +ThinLTO +O3 +MLGO"
+elif [ "${CLANG_VARIANT}" = "GRAYRAVEN-12" ]; then
+    COMPILER_STRING="GrayRavens Clang 12.0.1 +PGO +BOLT +Polly +ThinLTO +O3 +MLGO"
 else
     COMPILER_STRING="$("$CLANG_PATH/bin/clang" --version | head -n1)"
 fi
@@ -37,6 +41,62 @@ echo "Compiler string : $COMPILER_STRING"
 
 # ── KCFLAGS ──────────────────────────────────────────────────────────────────
 export KCFLAGS="-w -march=armv8.2-a -mtune=cortex-a55"
+
+# ── MLGO — download models ───────────────────────────────────────────────────
+# MLGO uses pre-trained ML models to guide inlining and regalloc decisions
+# at kernel compile time — no special clang needed, just model files
+MLGO_DIR="$(pwd)/mlgo-models"
+mkdir -p "$MLGO_DIR"
+
+echo "Downloading MLGO inlining model (Google inlining-Oz-v1.1)..."
+if [ ! -f "$MLGO_DIR/inlining/saved_model.pb" ]; then
+    mkdir -p "$MLGO_DIR/inlining"
+    curl -LSs \
+        "https://github.com/google/ml-compiler-opt/releases/download/inlining-Oz-v1.1/inlining-Oz-v1.1.tar.gz" \
+        | tar -xz -C "$MLGO_DIR/inlining" --strip-components=1
+    echo "Inlining model ready."
+else
+    echo "Inlining model already present, skipping."
+fi
+
+echo "Downloading MLGO regalloc model (kernel-trained ARM64)..."
+if [ ! -f "$MLGO_DIR/regalloc/saved_model.pb" ]; then
+    mkdir -p "$MLGO_DIR/regalloc"
+    # Kernel-specific regalloc model trained on Linux kernel sources (ARM64)
+    REGALLOC_URL=$(curl -s https://api.github.com/repos/dakkshesh07/mlgo-linux-kernel/releases/latest \
+        | grep "browser_download_url" \
+        | grep "arm64" \
+        | grep "regalloc" \
+        | head -1 \
+        | cut -d '"' -f 4)
+    if [ -n "$REGALLOC_URL" ]; then
+        curl -LSs "$REGALLOC_URL" | tar -xz -C "$MLGO_DIR/regalloc" --strip-components=1
+        echo "Regalloc model ready."
+    else
+        echo "WARNING: Could not find regalloc model, skipping regalloc MLGO."
+        MLGO_DIR=""
+    fi
+else
+    echo "Regalloc model already present, skipping."
+fi
+
+# ── MLGO KCFLAGS injection ────────────────────────────────────────────────────
+if [ -n "$MLGO_DIR" ] && [ -f "$MLGO_DIR/inlining/saved_model.pb" ]; then
+    echo "Enabling MLGO inlining..."
+    export KCFLAGS="${KCFLAGS} \
+        -mllvm -enable-ml-inliner=release \
+        -mllvm -ml-inliner-model-under-training-log=/dev/null \
+        -mllvm -inliner-model-import-path=${MLGO_DIR}/inlining"
+fi
+
+if [ -n "$MLGO_DIR" ] && [ -f "$MLGO_DIR/regalloc/saved_model.pb" ]; then
+    echo "Enabling MLGO regalloc..."
+    export KCFLAGS="${KCFLAGS} \
+        -mllvm -regalloc-enable-advisor=release \
+        -mllvm -regalloc-model-import-path=${MLGO_DIR}/regalloc"
+fi
+
+echo "KCFLAGS         : $KCFLAGS"
 
 # ── NTSYNC SELinux policy injection ─────────────────────────────────────────
 RULES_FILE="drivers/kernelsu/selinux/rules.c"

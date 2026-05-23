@@ -12,10 +12,11 @@ on:
           - ALL
         default: KWS
       clang_variant:
-        description: 'Clang toolchain (ALL = YUKI-22 + CLANG-12)'
+        description: 'Clang toolchain (ALL = YUKI-22 + NEUTRON-19 + CLANG-12)'
         type: choice
         options:
           - YUKI-22
+          - NEUTRON-19
           - CLANG-12
           - ALL
         default: YUKI-22
@@ -46,7 +47,7 @@ jobs:
           fi
 
           if [ "${{ inputs.clang_variant }}" = "ALL" ]; then
-            echo 'clang_variants=["YUKI-22","CLANG-12"]' >> $GITHUB_OUTPUT
+            echo 'clang_variants=["YUKI-22","NEUTRON-19","CLANG-12"]' >> $GITHUB_OUTPUT
           else
             echo 'clang_variants=["${{ inputs.clang_variant }}"]' >> $GITHUB_OUTPUT
           fi
@@ -97,6 +98,32 @@ jobs:
             | grep -i "profdata\|pgo\|instrumented" | head -10 \
             || echo "No PGO strings found"
 
+      # ── Neutron 19 ────────────────────────────────────────────────────────
+      - name: Download Neutron Clang 19
+        if: matrix.clang == 'NEUTRON-19'
+        run: |
+          mkdir -p ~/toolchain/neutron-clang
+          cd ~/toolchain/neutron-clang
+          curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
+          chmod +x antman
+          ./antman -S=10032024
+          ./antman --patch=glibc
+          echo "Neutron Clang 19 ready."
+
+      - name: Verify Neutron Clang optimizations
+        if: matrix.clang == 'NEUTRON-19'
+        run: |
+          echo "=== Clang binary BOLT check ==="
+          readelf -S ~/toolchain/neutron-clang/bin/clang \
+            | grep -i "bolt\|llvm_bb" || echo "No BOLT sections found"
+          echo "=== Clang build comment ==="
+          readelf -p .comment ~/toolchain/neutron-clang/bin/clang 2>/dev/null \
+            | head -20 || echo "No .comment section"
+          echo "=== PGO check ==="
+          strings ~/toolchain/neutron-clang/bin/clang \
+            | grep -i "profdata\|pgo\|instrumented" | head -10 \
+            || echo "No PGO strings found"
+
       # ── AOSP Clang r416183b (LLVM 12.0.5) ────────────────────────────────
       - name: Cache AOSP Clang r416183b
         if: matrix.clang == 'CLANG-12'
@@ -118,8 +145,9 @@ jobs:
       - name: Export CLANG_PATH
         run: |
           case "${{ matrix.clang }}" in
-            YUKI-22)   echo "CLANG_PATH=$HOME/toolchain/yuki-clang" >> $GITHUB_ENV ;;
-            CLANG-12)  echo "CLANG_PATH=$HOME/toolchain/aosp-clang-r416183b" >> $GITHUB_ENV ;;
+            YUKI-22)    echo "CLANG_PATH=$HOME/toolchain/yuki-clang" >> $GITHUB_ENV ;;
+            NEUTRON-19) echo "CLANG_PATH=$HOME/toolchain/neutron-clang" >> $GITHUB_ENV ;;
+            CLANG-12)   echo "CLANG_PATH=$HOME/toolchain/aosp-clang-r416183b" >> $GITHUB_ENV ;;
           esac
 
       # ── Kernel source ─────────────────────────────────────────────────────

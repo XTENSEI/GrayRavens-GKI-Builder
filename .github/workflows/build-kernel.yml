@@ -70,7 +70,7 @@ jobs:
           set -e
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           START_TS="$(date +"%m/%d/%y %I:%M %p")"
-          MSG="$(printf '%b' "<b>⚙️ Build Started</b>\n📋 <b>Workflow:</b> Kernel Build\n📱 <b>Kernel:</b> <code>${{ inputs.kernel_name }}</code>\n🌿 <b>Ref:</b> <code>${{ inputs.kernel_ref }}</code>\n🔍 <a href=\"${RUN_URL}\">Watch on GitHub Actions</a>\n[${START_TS}]")"
+          MSG="$(printf '%b' "<b>⚙️ Build Started</b>\n📋 <b>Workflow:</b> Kernel Build\n📱 <b>Kernel:</b> <code>${{ inputs.kernel_name }}</code>\n🌿 <b>Ref:</b> <code>${{ inputs.kernel_ref }}</code>\n🧬 <b>Matrix:</b> <code>${{ inputs.ksu_variant }}</code> | <code>${{ inputs.clang_variant }}</code>\n🔍 <a href=\"${RUN_URL}\">Watch on GitHub Actions</a>\n[${START_TS}]")"
           RES="$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d chat_id="${TG_CHAT_ID}" --data-urlencode text="$MSG" -d parse_mode="HTML" -d disable_web_page_preview=true)"
           MSG_ID="$(python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); print(d.get('result',{}).get('message_id','null'))" <<< "$RES")"
           echo "message_id=$MSG_ID" >> "$GITHUB_OUTPUT"
@@ -88,21 +88,14 @@ jobs:
       TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
       MESSAGE_ID: ${{ needs.notify-started.outputs.message_id }}
+      BAR_FILLED: "█"
+      BAR_EMPTY: "░"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Record Start Time
         run: echo "START_TIME=$(date +%s)" >> "$GITHUB_ENV"
-
-      - name: Update progress - Setup
-        run: |
-          set +e
-          if [ -z "${MESSAGE_ID}" ] || [ "${MESSAGE_ID}" = "null" ]; then exit 0; fi
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          BAR="##------------------ 10%"
-          TEXT="$(printf '%b' "<b>⚙️ Build Progress</b>\n📋 <b>Workflow:</b> Kernel Build\n🧬 <b>Variant:</b> <code>${{ matrix.ksu }}</code> | <code>${{ matrix.clang }}</code>\n🧩 <b>Stage:</b> Setup\n📶 <b>Progress:</b> <code>${BAR}</code>\n🪵 <a href=\"${RUN_URL}\">Full Workflow Log</a>")"
-          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/editMessageText" -d chat_id="${TG_CHAT_ID}" -d message_id="${MESSAGE_ID}" --data-urlencode text="$TEXT" -d parse_mode="HTML" -d disable_web_page_preview=true
 
       - name: Install build dependencies
         run: |
@@ -140,15 +133,6 @@ jobs:
       - name: Shallow-clone kernel source
         run: |
           git clone --depth=1 --branch "${{ inputs.kernel_ref }}" https://github.com/XTENSEI/kernel_common_5.10 kernel
-
-      - name: Update progress - Kernel source
-        run: |
-          set +e
-          if [ -z "${MESSAGE_ID}" ] || [ "${MESSAGE_ID}" = "null" ]; then exit 0; fi
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          BAR="########------------ 40%"
-          TEXT="$(printf '%b' "<b>⚙️ Build Progress</b>\n📋 <b>Workflow:</b> Kernel Build\n🧬 <b>Variant:</b> <code>${{ matrix.ksu }}</code> | <code>${{ matrix.clang }}</code>\n🧩 <b>Stage:</b> Kernel source\n📶 <b>Progress:</b> <code>${BAR}</code>\n🪵 <a href=\"${RUN_URL}\">Full Workflow Log</a>")"
-          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/editMessageText" -d chat_id="${TG_CHAT_ID}" -d message_id="${MESSAGE_ID}" --data-urlencode text="$TEXT" -d parse_mode="HTML" -d disable_web_page_preview=true
 
       - name: Apply KernelSU
         if: matrix.ksu != 'VNL'
@@ -191,15 +175,6 @@ jobs:
           chmod +x build.sh
           ./build.sh
 
-      - name: Update progress - Packaging
-        run: |
-          set +e
-          if [ -z "${MESSAGE_ID}" ] || [ "${MESSAGE_ID}" = "null" ]; then exit 0; fi
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          BAR="#################--- 85%"
-          TEXT="$(printf '%b' "<b>⚙️ Build Progress</b>\n📋 <b>Workflow:</b> Kernel Build\n🧬 <b>Variant:</b> <code>${{ matrix.ksu }}</code> | <code>${{ matrix.clang }}</code>\n🧩 <b>Stage:</b> Packaging\n📶 <b>Progress:</b> <code>${BAR}</code>\n🪵 <a href=\"${RUN_URL}\">Full Workflow Log</a>")"
-          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/editMessageText" -d chat_id="${TG_CHAT_ID}" -d message_id="${MESSAGE_ID}" --data-urlencode text="$TEXT" -d parse_mode="HTML" -d disable_web_page_preview=true
-
       - name: Package with AnyKernel3
         run: |
           ZIP_NAME="${{ inputs.kernel_name }}-${{ matrix.ksu }}-${{ matrix.clang }}"
@@ -216,16 +191,6 @@ jobs:
           name: ${{ env.ZIP_NAME }}
           path: ${{ env.ZIP_NAME }}.zip
 
-      - name: Update progress - Upload
-        if: always()
-        run: |
-          set +e
-          if [ -z "${MESSAGE_ID}" ] || [ "${MESSAGE_ID}" = "null" ]; then exit 0; fi
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          BAR="#################### 100%"
-          TEXT="$(printf '%b' "<b>⚙️ Build Progress</b>\n📋 <b>Workflow:</b> Kernel Build\n🧬 <b>Variant:</b> <code>${{ matrix.ksu }}</code> | <code>${{ matrix.clang }}</code>\n🧩 <b>Stage:</b> Upload\n📶 <b>Progress:</b> <code>${BAR}</code>\n🪵 <a href=\"${RUN_URL}\">Full Workflow Log</a>")"
-          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/editMessageText" -d chat_id="${TG_CHAT_ID}" -d message_id="${MESSAGE_ID}" --data-urlencode text="$TEXT" -d parse_mode="HTML" -d disable_web_page_preview=true
-
       - name: Compute Build Time
         if: always()
         run: |
@@ -239,8 +204,9 @@ jobs:
           SUCCESS_STICKER: "CAACAgUAAxkBAAFNAUpqN0lKsS2P_ew34Ldk-yA5xhg4bAAC0RgAAsMgYFdOfiL7ZJKFUDwE"
         run: |
           set +e
-          ARTIFACT_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MSG="$(printf '%b' "<b>✅ Build Succeeded</b>\n📋 <b>Workflow:</b> Kernel Build\n📱 <b>Kernel:</b> <code>${{ inputs.kernel_name }}</code>\n🧬 <b>Variant:</b> <code>${{ matrix.ksu }}</code> | <code>${{ matrix.clang }}</code>\n⏱️ <b>Time:</b> <code>${BUILD_TIME}</code>\n🔗 <a href=\"${ARTIFACT_URL}\">Open run (Artifacts)</a>")"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BAR="${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED}${BAR_FILLED} 100%"
+          MSG="$(printf '%b' "<b>✅ Build Succeeded</b>\n📋 <b>Workflow:</b> Kernel Build\n📱 <b>Kernel:</b> <code>${{ inputs.kernel_name }}</code>\n🧬 <b>Variant:</b> <code>${{ matrix.ksu }}</code> | <code>${{ matrix.clang }}</code>\n📶 <b>Progress:</b> <code>${BAR}</code>\n⏱️ <b>Time:</b> <code>${BUILD_TIME}</code>\n🪵 <a href=\"${RUN_URL}\">Open run (Artifacts)</a>")"
           REPLY_PARAM=""
           if [ -n "${MESSAGE_ID}" ] && [ "${MESSAGE_ID}" != "null" ]; then REPLY_PARAM="-d reply_to_message_id=${MESSAGE_ID}"; fi
           curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d chat_id="${TG_CHAT_ID}" $REPLY_PARAM --data-urlencode text="$MSG" -d parse_mode="HTML" -d disable_web_page_preview=true
@@ -257,4 +223,4 @@ jobs:
           REPLY_PARAM=""
           if [ -n "${MESSAGE_ID}" ] && [ "${MESSAGE_ID}" != "null" ]; then REPLY_PARAM="-d reply_to_message_id=${MESSAGE_ID}"; fi
           curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d chat_id="${TG_CHAT_ID}" $REPLY_PARAM --data-urlencode text="$MSG" -d parse_mode="HTML" -d disable_web_page_preview=true
-          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendSticker" -d chat_id="${TG_CHAT_ID}" $REPLY_PARAM -d sticker="${FAIL_STICKER}"
+          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendSticker" -d chat_id="${TG_CHAT_ID}" $REPLY_PARAM -d sticker="${FAIL_STICKER"

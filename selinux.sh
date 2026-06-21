@@ -84,16 +84,35 @@ ksu_allow(db, "kernel", "proc", "file", "open");\n\
 ksu_allow(db, "kernel", "proc", "file", "getattr");\n'
 
 # ---------------------------------------------------------------------------
-# Herald — kernel-to-userspace property relay
-# Exposes pending properties under /sys/kernel/herald/queue/*/.
-# The kernel creates these (kernfs — no file open needed).
-# Userspace daemon (system_app domain) reads them.
+# Herald / Kaisei — kernel-to-userspace property relay + panic recovery
+#
+# Herald exposes pending properties under /sys/kernel/herald/queue/*/.
+# The kernel creates these; userspace daemon (init context) reads name/value
+# and writes to commit.  system_app may also read them.
+#
+# Kaisei exposes status & stats under /sys/kernel/kaisei/ (same sysfs_kernel
+# type).  shell users cat these for debugging.
+#
+# Daemon context (init, from init.herald.rc in ramdisk):
+#   - read:  name, value, queue_depth
+#   - write: commit (mark consumed)
 # ---------------------------------------------------------------------------
-inject_selinux "Herald" \
+inject_selinux "Herald / Kaisei" \
 ' ksu_allow(db, "system_app", "sysfs_kernel", "dir", "search");\n\
 ksu_allow(db, "system_app", "sysfs_kernel", "file", "read");\n\
 ksu_allow(db, "system_app", "sysfs_kernel", "file", "open");\n\
-ksu_allow(db, "system_app", "sysfs_kernel", "file", "getattr");\n'
+ksu_allow(db, "system_app", "sysfs_kernel", "file", "getattr");\n\
+ksu_allow(db, "init", "sysfs_kernel", "dir", "search");\n\
+ksu_allow(db, "init", "sysfs_kernel", "dir", "getattr");\n\
+ksu_allow(db, "init", "sysfs_kernel", "file", "read");\n\
+ksu_allow(db, "init", "sysfs_kernel", "file", "write");\n\
+ksu_allow(db, "init", "sysfs_kernel", "file", "open");\n\
+ksu_allow(db, "init", "sysfs_kernel", "file", "getattr");\n\
+ksu_allow(db, "shell", "sysfs_kernel", "dir", "search");\n\
+ksu_allow(db, "shell", "sysfs_kernel", "dir", "getattr");\n\
+ksu_allow(db, "shell", "sysfs_kernel", "file", "read");\n\
+ksu_allow(db, "shell", "sysfs_kernel", "file", "open");\n\
+ksu_allow(db, "shell", "sysfs_kernel", "file", "getattr");\n'
 
 # ---------------------------------------------------------------------------
 # Iyashi / Kasumi — thermal performance management

@@ -67,19 +67,20 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         run: |
-          MSG="🚀 *Kernel build started*
-          *Name:* \`${{ inputs.kernel_name }}\`
-          *Ref:* \`${{ inputs.kernel_ref }}\`
-          *KSU:* \`${{ needs.setup.outputs.ksu_variants }}\`
-          *Clang:* \`${{ needs.setup.outputs.clang_variants }}\`
-          *Run* [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          
+          MSG="<b>🚀 Kernel Build Started</b>%0A%0A"
+          MSG+="<b>Name:</b> <code>${{ inputs.kernel_name }}</code>%0A"
+          MSG+="<b>Ref:</b> <code>${{ inputs.kernel_ref }}</code>%0A"
+          MSG+="<b>Matrix:</b> <code>${{ needs.setup.outputs.ksu_variants }} | ${{ needs.setup.outputs.clang_variants }}</code>%0A%0A"
+          MSG+="➖➖➖➖➖➖➖➖➖➖%0A"
+          MSG+="🔗 <a href='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'>View Build Progress</a>%0A"
+          MSG+="🆔 <b>Run:</b> <code>#${{ github.run_number }}</code>"
+
           RES=$(curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
             -d chat_id="$TG_CHAT_ID" \
             --data-urlencode text="$MSG" \
-            -d parse_mode="Markdown" \
+            -d parse_mode="HTML" \
             -d disable_web_page_preview=true)
-            
+
           MSG_ID=$(echo "$RES" | jq -r '.result.message_id')
           echo "message_id=$MSG_ID" >> $GITHUB_OUTPUT
 
@@ -92,7 +93,7 @@ jobs:
         ksu: ${{ fromJson(needs.setup.outputs.ksu_variants) }}
         clang: ${{ fromJson(needs.setup.outputs.clang_variants) }}
     steps:
-      - name: Checkout workflow repo (build.sh lives here)
+      - name: Checkout workflow repo
         uses: actions/checkout@v4
 
       - name: Record Start Time
@@ -109,96 +110,64 @@ jobs:
       - name: Download Clang 19
         if: matrix.clang == 'CLANG-19'
         run: |
-          git clone --depth=1 \
-            https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r536225.git \
-            ~/toolchain/aosp-r536225
-          echo "Clang 19 (r536225) ready."
+          git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r536225.git ~/toolchain/aosp-r536225
 
-      - name: Cache AOSP Clang r416183b
+      - name: Cache & Download Clang 12
         if: matrix.clang == 'CLANG-12'
-        id: cache-aosp-12
         uses: actions/cache@v4
         with:
           path: ~/toolchain/aosp-clang-r416183b
           key: aosp-clang-r416183b-x86_64
-
-      - name: Download AOSP Clang r416183b (if not cached)
-        if: matrix.clang == 'CLANG-12' && steps.cache-aosp-12.outputs.cache-hit != 'true'
+      - name: Download AOSP Clang r416183b
+        if: matrix.clang == 'CLANG-12' && steps.cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth=1 \
-            https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git \
-            ~/toolchain/aosp-clang-r416183b
-          echo "AOSP Clang r416183b (LLVM 12.0.5) ready."
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git ~/toolchain/aosp-clang-r416183b
 
-      - name: Run Clang Audit Verification
+      - name: Run Clang Audit
         run: |
           case "${{ matrix.clang }}" in
             CLANG-19) TC_PATH="$HOME/toolchain/aosp-r536225/bin/clang" ;;
             CLANG-12) TC_PATH="$HOME/toolchain/aosp-clang-r416183b/bin/clang" ;;
           esac
-          echo "=== Auditing: ${{ matrix.clang }} ==="
-          $TC_PATH --version | head -n 2 || true
-          readelf -S $TC_PATH | grep -iE "bolt|llvm_bb" || echo "No BOLT layout found"
-          strings $TC_PATH | grep -iE "regalloc-model|inline-model|mlgo" | head -n 2 || echo "No MLGO models embedded"
+          $TC_PATH --version | head -n 2
 
       - name: Export CLANG_PATH
         run: |
           case "${{ matrix.clang }}" in
-            CLANG-19) echo "CLANG_PATH=$HOME/toolchain/aosp-r536225"        >> $GITHUB_ENV ;;
+            CLANG-19) echo "CLANG_PATH=$HOME/toolchain/aosp-r536225" >> $GITHUB_ENV ;;
             CLANG-12) echo "CLANG_PATH=$HOME/toolchain/aosp-clang-r416183b" >> $GITHUB_ENV ;;
           esac
 
       - name: Shallow-clone kernel source
         run: |
-          git clone --depth=1 --branch "${{ inputs.kernel_ref }}" \
-            https://github.com/XTENSEI/kernel_common_5.10 kernel
+          git clone --depth=1 --branch "${{ inputs.kernel_ref }}" https://github.com/XTENSEI/kernel_common_5.10 kernel
 
-      - name: Apply KernelSU (${{ matrix.ksu }})
+      - name: Apply KernelSU
         if: matrix.ksu != 'VNL'
         working-directory: kernel
         run: |
           if [ "${{ matrix.ksu }}" = "KWS" ]; then
             curl -LSs "https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh" | bash -s master
-            printf '\nCONFIG_KSU=y\nCONFIG_KSU_MANUAL_SU=n\nCONFIG_KSU_SUSFS=n\n' \
-              >> arch/arm64/configs/gki_defconfig
+            printf '\nCONFIG_KSU=y\nCONFIG_KSU_MANUAL_SU=n\nCONFIG_KSU_SUSFS=n\n' >> arch/arm64/configs/gki_defconfig
           else
             curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
-            printf '\nCONFIG_KSU=y\nCONFIG_KSU_MANUAL_SU=n\nCONFIG_KSU_SUSFS=y\n' \
-              >> arch/arm64/configs/gki_defconfig
+            printf '\nCONFIG_KSU=y\nCONFIG_KSU_MANUAL_SU=n\nCONFIG_KSU_SUSFS=y\n' >> arch/arm64/configs/gki_defconfig
           fi
 
-      - name: Verify KSU integration (${{ matrix.ksu }})
-        if: matrix.ksu != 'VNL'
-        working-directory: kernel
-        run: |
-          echo "=== KSU directory check ==="
-          ls -la KernelSU* 2>/dev/null || echo "WARNING: No KernelSU dir found!"
-          echo "=== drivers/kernelsu check ==="
-          ls drivers/kernelsu/ 2>/dev/null || echo "WARNING: drivers/kernelsu missing!"
-          echo "=== Kconfig/Makefile hooks ==="
-          grep -r "kernelsu\|KSU" drivers/Makefile drivers/Kconfig 2>/dev/null || echo "WARNING: No KSU hooks in drivers!"
-          echo "=== gki_defconfig KSU entries ==="
-          grep "CONFIG_KSU" arch/arm64/configs/gki_defconfig || echo "WARNING: No KSU configs in gki_defconfig!"
-
-      - name: Apply SUSFS patches (KSUN only)
+      - name: Apply SUSFS patches (KSUN)
         if: matrix.ksu == 'KSUN'
         working-directory: kernel
         run: |
           git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 sus
           rm -rf sus/.git
-          susfs=sus/kernel_patches
-          cp -r "$susfs/fs" .
-          cp -r "$susfs/include" .
-          cp -r "$susfs/50_add_susfs_in_gki-android12-5.10.patch" .
-          patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
+          cp -r sus/kernel_patches/fs .
+          cp -r sus/kernel_patches/include .
+          patch -p1 < sus/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch
 
-      - name: Set LOCALVERSION in gki_defconfig
+      - name: Set LOCALVERSION
         working-directory: kernel
         run: |
-          LOCALVER="-${{ inputs.kernel_name }}-${{ matrix.ksu }}"
-          printf '\nCONFIG_LOCALVERSION="%s"\n' "$LOCALVER" \
-            >> arch/arm64/configs/gki_defconfig
-          echo "LOCALVERSION set to: $LOCALVER"
+          printf '\nCONFIG_LOCALVERSION="-${{ inputs.kernel_name }}-${{ matrix.ksu }}"\n' >> arch/arm64/configs/gki_defconfig
 
       - name: Run build.sh
         working-directory: kernel
@@ -217,24 +186,13 @@ jobs:
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           git clone --depth=1 https://github.com/XTENSEI/GrayRavens-anykernel anykernel
           cp kernel/out/arch/arm64/boot/Image anykernel/Image
-          cd anykernel
-          zip -r9 "../${ZIP_NAME}.zip" . \
-            --exclude="*.git*" --exclude="README.md" --exclude="*.placeholder"
+          cd anykernel && zip -r9 "../${ZIP_NAME}.zip" . --exclude="*.git*" --exclude="README.md"
 
-      - name: Upload kernel image
-        uses: actions/upload-artifact@v4
-        with:
-          name: Image-${{ matrix.ksu }}-${{ matrix.clang }}-${{ inputs.kernel_ref }}
-          path: kernel/out/arch/arm64/boot/Image
-          if-no-files-found: error
-
-      - name: Upload flashable zip
-        id: upload-zip
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ZIP_NAME }}
           path: ${{ env.ZIP_NAME }}.zip
-          if-no-files-found: error
 
       - name: Compute Build Time
         if: always()
@@ -243,39 +201,26 @@ jobs:
           DIFF=$((END_TIME - START_TIME))
           echo "BUILD_TIME=$((DIFF / 60))m $((DIFF % 60))s" >> $GITHUB_ENV
 
-      - name: Send Success Notification (SUCCESS)
+      - name: Send Success Notification
         if: success()
         env:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           MESSAGE_ID: ${{ needs.notify-started.outputs.message_id }}
           SUCCESS_STICKER: "CAACAgUAAxkBAAFNAUpqN0lKsS2P_ew34Ldk-yA5xhg4bAAC0RgAAsMgYFdOfiL7ZJKFUDwE"
-          ARTIFACT_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.upload-zip.outputs.artifact-id }}
         run: |
-            MSG="✅ *Kernel Build Succeeded*
-            🏷️ *Name:* \`${{ inputs.kernel_name }}\`
-            🧬 *Variant:* \`${{ matrix.ksu }} | ${{ matrix.clang }}\`
-            ⏱️ *Time to Build:* \`$BUILD_TIME\`
-            📥 [Download Artifact]($ARTIFACT_URL)"
-            
-            REPLY_PARAM=""
-            if [ -n "$MESSAGE_ID" ] && [ "$MESSAGE_ID" != "null" ]; then
-              REPLY_PARAM="-d reply_to_message_id=$MESSAGE_ID"
-            fi
-            
-            curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
-            -d chat_id="$TG_CHAT_ID" \
-            $REPLY_PARAM \
-            --data-urlencode text="$MSG" \
-            -d parse_mode="Markdown" \
-            -d disable_web_page_preview=true
-            
-            curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendSticker" \
-            -d chat_id="$TG_CHAT_ID" \
-            $REPLY_PARAM \
-            -d sticker="$SUCCESS_STICKER"
+          MSG="<b>✅ Kernel Build Succeeded</b>%0A%0A"
+          MSG+="<b>Name:</b> <code>${{ inputs.kernel_name }}</code>%0A"
+          MSG+="<b>Variant:</b> <code>${{ matrix.ksu }} | ${{ matrix.clang }}</code>%0A"
+          MSG+="<b>Time:</b> <code>$BUILD_TIME</code>%0A%0A"
+          MSG+="➖➖➖➖➖➖➖➖➖➖%0A"
+          MSG+="📥 <a href='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'>Download Artifacts</a>"
 
-      - name: Send Failed Notification (FAILURE)
+          REPLY_PARAM="-d reply_to_message_id=$MESSAGE_ID"
+          curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" -d chat_id="$TG_CHAT_ID" $REPLY_PARAM --data-urlencode text="$MSG" -d parse_mode="HTML"
+          curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendSticker" -d chat_id="$TG_CHAT_ID" $REPLY_PARAM -d sticker="$SUCCESS_STICKER"
+
+      - name: Send Failed Notification
         if: failure()
         env:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
@@ -283,25 +228,12 @@ jobs:
           MESSAGE_ID: ${{ needs.notify-started.outputs.message_id }}
           FAIL_STICKER: "CAACAgIAAxkBAAFNAUxqN0lgFIm_LcQAAUJvYSHSyQABjIiDAALJQgACsjhYSljb2W62RQRlPAQ"
         run: |
-            MSG="❌ *Aduh! Build Failed bang...*
-            🏷️ *Name:* \`${{ inputs.kernel_name }}\`
-            🧬 *Variant:* \`${{ matrix.ksu }} | ${{ matrix.clang }}\`
-            ⏱️ *Time elapsed:* \`$BUILD_TIME\`
-            🔍 [Check GitHub Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-            
-            REPLY_PARAM=""
-            if [ -n "$MESSAGE_ID" ] && [ "$MESSAGE_ID" != "null" ]; then
-              REPLY_PARAM="-d reply_to_message_id=$MESSAGE_ID"
-            fi
-            
-            curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
-            -d chat_id="$TG_CHAT_ID" \
-            $REPLY_PARAM \
-            --data-urlencode text="$MSG" \
-            -d parse_mode="Markdown" \
-            -d disable_web_page_preview=true
-            
-            curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendSticker" \
-            -d chat_id="$TG_CHAT_ID" \
-            $REPLY_PARAM \
-            -d sticker="$FAIL_STICKER"
+          MSG="<b>❌ Kernel Build Failed</b>%0A%0A"
+          MSG+="<b>Name:</b> <code>${{ inputs.kernel_name }}</code>%0A"
+          MSG+="<b>Variant:</b> <code>${{ matrix.ksu }} | ${{ matrix.clang }}</code>%0A"
+          MSG+="<b>Time elapsed:</b> <code>$BUILD_TIME</code>%0A%0A"
+          MSG+="🔍 <a href='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'>Check Logs</a>"
+
+          REPLY_PARAM="-d reply_to_message_id=$MESSAGE_ID"
+          curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" -d chat_id="$TG_CHAT_ID" $REPLY_PARAM --data-urlencode text="$MSG" -d parse_mode="HTML"
+          curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendSticker" -d chat_id="$TG_CHAT_ID" $REPLY_PARAM -d sticker="$FAIL_STICKER"

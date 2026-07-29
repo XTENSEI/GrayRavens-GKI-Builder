@@ -33,11 +33,13 @@ else
     echo "Polly : not available in this toolchain — skipping"
 fi
 # ── KCFLAGS ──────────────────────────────────────────────────────────────────
-# NOTE: arch-specific flags (-march, -mtune) are handled by arch/arm64/Makefile
-# via KBUILD_CFLAGS. Do NOT put them in KCFLAGS — KCFLAGS is exported and leaks
-# into host tool compilation (x86_64), causing "unknown target CPU" errors.
-# Keep only host-safe flags here.
+# android12-5.10 with LLVM=1 doesn't auto-set -target aarch64-linux-gnu from
+# ARCH=arm64, so Clang defaults to the host arch (x86_64) on CI runners.
+# The -target flag tells Clang to compile for ARM64 without needing any
+# ARM-specific -march/-mtune flags that could leak into host tools.
+# Kernel's own arch/arm64/Makefile handles -march via -Wa,-march=$(asm-arch).
 export KCFLAGS="-w \
+-target aarch64-linux-gnu \
 -fno-semantic-interposition \
 ${POLLY_FLAGS}"
 # ── SELinux policy injection ─────────────────────────────────────────────────

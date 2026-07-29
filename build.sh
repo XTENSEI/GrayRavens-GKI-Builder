@@ -6,7 +6,10 @@ trap 'echo "Build failed at line $LINENO. Exit code: $?" >&2' ERR
 # ── Environment setup ────────────────────────────────────────────────────────
 export ARCH=arm64
 export LLVM=1
-export LLVM_IAS=1
+# LLVM_IAS=0: Use GNU assembler (GAS) for assembly instead of Clang's integrated
+# assembler. Kernel 5.10's ARM64 assembly uses .req register aliases and other
+# patterns that Clang IAS chokes on ("unexpected token in argument list").
+export LLVM_IAS=0
 export KBUILD_BUILD_USER="GrayRavens-Team"
 export KBUILD_BUILD_HOST="Zenithed-V9-Empyrian"
 # ── Clang toolchain ──────────────────────────────────────────────────────────
@@ -37,7 +40,6 @@ fi
 # ARCH=arm64, so Clang defaults to the host arch (x86_64) on CI runners.
 # The -target flag tells Clang to compile for ARM64 without needing any
 # ARM-specific -march/-mtune flags that could leak into host tools.
-# Kernel's own arch/arm64/Makefile handles -march via -Wa,-march=$(asm-arch).
 export KCFLAGS="-w \
 -target aarch64-linux-gnu \
 -fno-semantic-interposition \

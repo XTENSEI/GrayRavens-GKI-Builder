@@ -1,0 +1,244 @@
+name: Build kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      ksu_variant:
+        description: 'KernelSU variant (ALL = KWS + KSUN + VNL)'
+        type: choice
+        options:
+          - KWS
+          - KSUN
+          - VNL
+          - ALL
+        default: KWS
+      clang_variant:
+        description: 'Clang toolchain Selection'
+        type: choice
+        options:
+          - CLANG-19
+          - CLANG-12
+          - ALL
+        default: CLANG-19
+      kernel_name:
+        description: 'Kernel base name'
+        type: string
+        default: GrayRavens-Zenithed
+      kernel_ref:
+        description: 'kernel branch / tag / SHA to build'
+        type: string
+        default: android12-5.10
+      kmi_symbol_check:
+        description: 'Run KMI symbol validation'
+        type: boolean
+        default: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      ksu_variants: ${{ steps.resolve.outputs.ksu_variants }}
+      clang_variants: ${{ steps.resolve.outputs.clang_variants }}
+    steps:
+      - name: Resolve variants
+        id: resolve
+        run: |
+          if [ "${{ inputs.ksu_variant }}" = "ALL" ]; then
+            echo 'ksu_variants=["KWS","KSUN","VNL"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ksu_variants=["${{ inputs.ksu_variant }}"]' >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ inputs.clang_variant }}" = "ALL" ]; then
+            echo 'clang_variants=["CLANG-19","CLANG-12"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'clang_variants=["${{ inputs.clang_variant }}"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  notify-started:
+    name: Notify Telegram (started)
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send started alert
+        env:
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        run: |
+          set -e
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          START_TS="$(date +"%m/%d/%y %I:%M %p")"
+          MSG="$(printf '%b' "<b>⚙️ Kernel Build Started</b>\n📋 <b>Workflow:</b> Kernel Build\n📱 <b>Kernel:</b> <code>${{ inputs.kernel_name }}</code>\n🌿 <b>Ref:</b> <code>${{ inputs.kernel_ref }}</code>\n🧬 <b>Matrix:</b> <code>${{ inputs.ksu_variant }}</code> | <code>${{ inputs.clang_variant }}</code>\n🔍 <a href=\"${RUN_URL}\">Watch on GitHub Actions</a>\n[${START_TS}]")"
+          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d chat_id="${TG_CHAT_ID}" --data-urlencode text="$MSG" -d parse_mode="HTML" -d disable_web_page_preview=true
+
+  build:
+    name: Build (${{ matrix.ksu }} / ${{ matrix.clang }})
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ksu: ${{ fromJson(needs.setup.outputs.ksu_variants) }}
+        clang: ${{ fromJson(needs.setup.outputs.clang_variants) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex build-essential libssl-dev libelf-dev \
+            cpio kmod rsync zip patch curl ca-certificates \
+            python3 python3-pip python3-lxml git wget binutils zstd
+
+      - name: Download Clang 19
+        if: matrix.clang == 'CLANG-19'
+        run: |
+          git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r536225.git ~/toolchain/aosp-r536225
+
+      - name: Cache AOSP Clang r416183b
+        if: matrix.clang == 'CLANG-12'
+        id: cache-aosp-12
+        uses: actions/cache@v4
+        with:
+          path: ~/toolchain/aosp-clang-r416183b
+          key: aosp-clang-r416183b-x86_64
+
+      - name: Download AOSP Clang r416183b
+        if: matrix.clang == 'CLANG-12' && steps.cache-aosp-12.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git ~/toolchain/aosp-clang-r416183b
+
+      - name: Export CLANG_PATH
+        run: |
+          case "${{ matrix.clang }}" in
+            CLANG-19) echo "CLANG_PATH=$HOME/toolchain/aosp-r536225" >> "$GITHUB_ENV" ;;
+            CLANG-12) echo "CLANG_PATH=$HOME/toolchain/aosp-clang-r416183b" >> "$GITHUB_ENV" ;;
+          esac
+
+      - name: Shallow-clone kernel source
+        run: |
+          git clone --depth=1 --branch "${{ inputs.kernel_ref }}" https://github.com/XTENSEI/kernel_common_5.10 kernel
+
+      - name: Apply KernelSU
+        if: matrix.ksu != 'VNL'
+        working-directory: kernel
+        run: |
+          if [ "${{ matrix.ksu }}" = "KWS" ]; then
+            curl -LSs "https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh" | bash -s master
+            printf '\nCONFIG_KSU=y\nCONFIG_KSU_MANUAL_SU=n\nCONFIG_KSU_SUSFS=n\n' >> arch/arm64/configs/gki_defconfig
+          else
+            curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+            printf '\nCONFIG_KSU=y\nCONFIG_KSU_MANUAL_SU=n\nCONFIG_KSU_SUSFS=y\n' >> arch/arm64/configs/gki_defconfig
+          fi
+
+      - name: Apply SUSFS patches (KSUN only)
+        if: matrix.ksu == 'KSUN'
+        working-directory: kernel
+        run: |
+          git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 sus
+          rm -rf sus/.git
+          susfs=sus/kernel_patches
+          cp -r "$susfs/fs" .
+          cp -r "$susfs/include" .
+          cp -r "$susfs/50_add_susfs_in_gki-android12-5.10.patch" .
+          patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
+
+      - name: Set LOCALVERSION
+        working-directory: kernel
+        run: |
+          LOCALVER="-${{ inputs.kernel_name }}-${{ matrix.ksu }}"
+          printf '\nCONFIG_LOCALVERSION="%s"\n' "$LOCALVER" >> arch/arm64/configs/gki_defconfig
+
+      - name: Run build.sh
+        working-directory: kernel
+        env:
+          CLANG_PATH: ${{ env.CLANG_PATH }}
+          CLANG_VARIANT: ${{ matrix.clang }}
+          KMI_SYMBOL_CHECK: ${{ inputs.kmi_symbol_check }}
+        run: |
+          cp "$GITHUB_WORKSPACE/build.sh" .
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Package with AnyKernel3
+        run: |
+          ZIP_NAME="${{ inputs.kernel_name }}-${{ matrix.ksu }}-${{ matrix.clang }}"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+          git clone --depth=1 https://github.com/XTENSEI/GrayRavens-anykernel anykernel
+          cp kernel/out/arch/arm64/boot/Image anykernel/Image
+          cd anykernel
+          zip -r9 "../${ZIP_NAME}.zip" . --exclude="*.git*" --exclude="README.md" --exclude="*.placeholder"
+
+      - name: Upload flashable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}.zip
+
+  telegram-summary:
+    name: Telegram summary
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Send summary to Telegram
+        env:
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends jq
+
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          RUN_ID="${{ github.run_id }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BUILD_DATE="$(date +%Y%m%d)"
+          COMMIT_SHORT="${GITHUB_SHA:0:7}"
+          KERNEL_NAME="${{ inputs.kernel_name }}"
+
+          JOBS_JSON="$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100")"
+          ARTS_JSON="$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/${RUN_ID}/artifacts?per_page=100")"
+
+          ART_NAMES_FILE="/tmp/art_names.txt"
+          echo "$ARTS_JSON" | jq -r '.artifacts[]?.name' | sed '/^null$/d' > "$ART_NAMES_FILE" || true
+
+          SUMMARY=""
+          while IFS=$'\t' read -r job_name job_conclusion job_status; do
+            if [ -z "$job_name" ]; then
+              continue
+            fi
+
+            case "$job_conclusion" in
+              success) EMOJI="✅" ;;
+              failure|cancelled|timed_out|action_required) EMOJI="❌" ;;
+              *)
+                if [ "$job_status" = "completed" ]; then EMOJI="⚠️"; else EMOJI="⏳"; fi
+                ;;
+            esac
+
+            variant="${job_name#Build (}"
+            variant="${variant%)}"
+            ksu="$(echo "$variant" | cut -d'/' -f1 | xargs)"
+            clang="$(echo "$variant" | cut -d'/' -f2 | xargs)"
+
+            expected="${KERNEL_NAME}-${ksu}-${clang}"
+            if grep -Fxq "$expected" "$ART_NAMES_FILE"; then
+              line="${EMOJI} <b>${ksu}</b> | <b>${clang}</b> — <code>${expected}.zip</code>"
+            else
+              line="${EMOJI} <b>${ksu}</b> | <b>${clang}</b> — <i>artifact in run page</i>"
+            fi
+
+            if [ -z "$SUMMARY" ]; then
+              SUMMARY="$line"
+            else
+              SUMMARY="$SUMMARY\n$line"
+            fi
+          done < <(echo "$JOBS_JSON" | jq -r '.jobs[] | select(.name|startswith("Build (")) | [.name, (.conclusion // ""), (.status // "")] | @tsv')
+
+          TEXT="$(printf '%b' "<b>🚀 Kernel Matrix Summary</b>\n📋 <b>Workflow:</b> Kernel Build\n📱 <b>Kernel:</b> <code>${{ inputs.kernel_name }}</code>\n🌿 <b>Ref:</b> <code>${{ inputs.kernel_ref }}</code>\n📅 <b>Build Date:</b> <code>${BUILD_DATE}</code>\n📝 <b>Commit:</b> <code>${COMMIT_SHORT}</code>\n\n${SUMMARY}\n\n📦 <b>Artifacts:</b> open the run page → Artifacts\n🔗 <a href=\"${RUN_URL}\">${RUN_URL}</a>")"
+
+          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d chat_id="${TG_CHAT_ID}" --data-urlencode text="$TEXT" -d parse_mode="HTML" -d disable_web_page_preview=true

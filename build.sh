@@ -7,6 +7,7 @@ trap 'echo "Build failed at line $LINENO. Exit code: $?" >&2' ERR
 export ARCH=arm64
 export LLVM=1
 export LLVM_IAS=1
+export CROSS_COMPILE=aarch64-linux-gnu-
 export KBUILD_BUILD_USER="GrayRavens-Team"
 export KBUILD_BUILD_HOST="Zenithed-V9-Empyrian"
 # ── Clang toolchain ──────────────────────────────────────────────────────────

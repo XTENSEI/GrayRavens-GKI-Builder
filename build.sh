@@ -16,6 +16,21 @@ if [ -z "$CLANG_PATH" ]; then
     exit 1
 fi
 export PATH="${CLANG_PATH}/bin:${PATH}"
+
+# ── GCC-toolchain probe pin (KMI/CRC stability) ─────────────────────────────
+# The 5.10.260 Makefile computes clang's --prefix/--gcc-toolchain from
+# `which $(CROSS_COMPILE)elfedit`. On the GitHub runner that resolves to
+# /usr, so clang picks up the distro gcc-13 stdarg/stddef headers, which
+# shift genksyms CRCs vs the reference ABI XML (generated with a gcc-4.9-era
+# toolchain) -> thousands of false KMI mismatches. A stub elfedit makes the
+# probe point at a gcc-less dir so clang uses its own resource headers (the
+# reference CRC state). The stub is probed by make only - never executed.
+PROBE_DIR="${PWD}/.gcc-toolchain-probe"
+mkdir -p "${PROBE_DIR}"
+printf '#!/bin/sh\nexit 0\n' > "${PROBE_DIR}/aarch64-linux-gnu-elfedit"
+chmod +x "${PROBE_DIR}/aarch64-linux-gnu-elfedit"
+export PATH="${PROBE_DIR}:${PATH}"
+
 echo "CLANG_VARIANT : '${CLANG_VARIANT}'"
 echo "Toolchain path : $CLANG_PATH"
 echo "Clang version : $("$CLANG_PATH/bin/clang" --version | head -n1)"

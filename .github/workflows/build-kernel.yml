@@ -27,7 +27,7 @@ on:
       kernel_ref:
         description: 'kernel branch / tag / SHA to build'
         type: string
-        default: android12-5.10
+        default: android12-5.10-experimental
       kmi_symbol_check:
         description: 'Run KMI symbol validation'
         type: boolean

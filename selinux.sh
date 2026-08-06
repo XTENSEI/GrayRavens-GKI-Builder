@@ -71,7 +71,11 @@ ksu_allow(db, "kernel", "system_file", "file", "getattr");\n\
 ksu_allow(db, "kernel", "magisk_exec", "file", "execute_no_trans");\n\
 ksu_allow(db, "kernel", "magisk_exec", "file", "read");\n\
 ksu_allow(db, "kernel", "magisk_exec", "file", "open");\n\
-ksu_allow(db, "kernel", "magisk_exec", "file", "getattr");\n'
+ksu_allow(db, "kernel", "magisk_exec", "file", "getattr");\n\
+ksu_allow(db, "kernel", "ksu_exec", "file", "execute_no_trans");\n\
+ksu_allow(db, "kernel", "ksu_exec", "file", "read");\n\
+ksu_allow(db, "kernel", "ksu_exec", "file", "open");\n\
+ksu_allow(db, "kernel", "ksu_exec", "file", "getattr");\n'
 
 # ---------------------------------------------------------------------------
 # Zenith - tunable dir under /sys/devices/system/cpu/cpufreq (sysfs_devices_system_cpu)

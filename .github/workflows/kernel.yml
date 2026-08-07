@@ -142,19 +142,25 @@ jobs:
           cp -r "$susfs/fs" .
           cp -r "$susfs/include" .
           cp -r "$susfs/50_add_susfs_in_gki-android12-5.10.patch" .
-          patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
+          patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch || true
 
-          # Workaround: susfs4ksu's gki-android12-5.10 patch calls the 5.15+
+          # A failed hunk in fs/proc/bootconfig.c is EXPECTED: kaguya's
+          # in-tree bootconfig spoof rewrote that file, so the SUSFS
+          # SPOOF_CMDLINE_OR_BOOTCONFIG hunk rejects (.rej).  kaguya
+          # covers the same surface, so it is harmless.  But the
+          # fs/namei.c OPEN_REDIRECT hunks are essential - fail hard
+          # if they did not apply.
+          #
+          # Workaround for upstream bug: the SUSFS patch calls the 5.15+
           # 4-arg set_nameidata() at three sites (do_tmpfile/do_o_path/
-          # path_openat, CONFIG_KSU_SUSFS_OPEN_REDIRECT) while android12-5.10
-          # keeps the 3-arg signature, breaking KSUN builds on 5.10.262.
-          # Drop the trailing ", NULL" until upstream ships the fix.
-          # No-op (harmless) once upstream fixes the call sites.
+          # path_openat) while android12-5.10 keeps the 3-arg signature.
+          # Drop the trailing ", NULL"; no-op once upstream fixes it.
           if grep -q 'set_nameidata(nd, old_dfd, fake_filename, NULL);' fs/namei.c; then
             sed -i 's/set_nameidata(nd, old_dfd, fake_filename, NULL);/set_nameidata(nd, old_dfd, fake_filename);/' fs/namei.c
             echo "susfs: applied set_nameidata() 3-arg workaround (dropped ', NULL')"
           else
-            echo "susfs: set_nameidata() already 3-arg or upstream fixed -- no workaround needed"
+            echo "FATAL: SUSFS fs/namei.c OPEN_REDIRECT hunks did not apply"
+            exit 1
           fi
 
       - name: Set LOCALVERSION

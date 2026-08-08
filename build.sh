@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# android12-5.10 GKI Kernel Build Script
+# GrayRavens GKI Kernel Build Script (android12-5.10 / android13-5.15)
 
 set -e
 

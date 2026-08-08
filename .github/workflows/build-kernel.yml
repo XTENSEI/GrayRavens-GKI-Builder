@@ -28,6 +28,14 @@ on:
         description: 'kernel branch / tag / SHA to build'
         type: string
         default: android12-5.10-experimental
+      kernel_repo:
+        description: 'Kernel repository (owner/repo) to build'
+        type: string
+        default: XTENSEI/kernel_common_5.10
+      susfs_branch:
+        description: 'SUSFS kernel patch branch (gki-android12-5.10 / gki-android13-5.15 ...)'
+        type: string
+        default: gki-android12-5.10
       kmi_symbol_check:
         description: 'Run KMI symbol validation'
         type: boolean
@@ -118,7 +126,7 @@ jobs:
 
       - name: Shallow-clone kernel source
         run: |
-          git clone --depth=1 --branch "${{ inputs.kernel_ref }}" https://github.com/XTENSEI/kernel_common_5.10 kernel
+          git clone --depth=1 --branch "${{ inputs.kernel_ref }}" "https://github.com/${{ inputs.kernel_repo }}" kernel
 
       - name: Apply KernelSU
         if: matrix.ksu != 'VNL'
@@ -136,13 +144,19 @@ jobs:
         if: matrix.ksu == 'KSUN'
         working-directory: kernel
         run: |
-          git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 sus
+          SUSFS_BRANCH="${{ inputs.susfs_branch }}"
+          git clone https://gitlab.com/simonpunk/susfs4ksu/ -b "${SUSFS_BRANCH}" sus
           rm -rf sus/.git
           susfs=sus/kernel_patches
           cp -r "$susfs/fs" .
           cp -r "$susfs/include" .
-          cp -r "$susfs/50_add_susfs_in_gki-android12-5.10.patch" .
-          patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch || true
+          PATCH_FILE="$susfs/50_add_susfs_in_${SUSFS_BRANCH}.patch"
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "FATAL: patch $PATCH_FILE not found in susfs4ksu ${SUSFS_BRANCH}"
+            exit 1
+          fi
+          cp "$PATCH_FILE" .
+          patch -p1 < "$(basename "$PATCH_FILE")" || true
 
           # A failed hunk in fs/proc/bootconfig.c is EXPECTED: kaguya's
           # in-tree bootconfig spoof rewrote that file, so the SUSFS
@@ -151,22 +165,26 @@ jobs:
           # fs/namei.c OPEN_REDIRECT hunks are essential - fail hard
           # if they did not apply.
           #
-          # Workaround for upstream bug: the SUSFS patch calls the 5.15+
-          # 4-arg set_nameidata() at three sites (do_tmpfile/do_o_path/
-          # path_openat) while android12-5.10 keeps the 3-arg signature.
-          # Drop the trailing ", NULL".  Newer susfs4ksu gki-android12-5.10
-          # patches already use the 3-arg form directly, so accept both:
-          #   - 4-arg present  -> sed the workaround
-          #   - 3-arg present  -> already correct, nothing to do
-          #   - neither        -> OPEN_REDIRECT hunks really failed
-          if grep -q 'set_nameidata(nd, old_dfd, fake_filename, NULL);' fs/namei.c; then
-            sed -i 's/set_nameidata(nd, old_dfd, fake_filename, NULL);/set_nameidata(nd, old_dfd, fake_filename);/' fs/namei.c
-            echo "susfs: applied set_nameidata() 3-arg workaround (dropped ', NULL')"
-          elif grep -q 'set_nameidata(nd, old_dfd, fake_filename);' fs/namei.c; then
-            echo "susfs: upstream patch already uses 3-arg set_nameidata() - no workaround needed"
+          # set_nameidata() signature differs between 5.10 (3-arg) and
+          # 5.15+ (native 4-arg).  The sed workaround is 5.10-ONLY; on
+          # android13-5.15 the susfs patch targets the 4-arg form natively
+          # and must be left untouched.
+          if [[ "${{ inputs.susfs_branch }}" == gki-android12-5.10* ]]; then
+            if grep -q 'set_nameidata(nd, old_dfd, fake_filename, NULL);' fs/namei.c; then
+              sed -i 's/set_nameidata(nd, old_dfd, fake_filename, NULL);/set_nameidata(nd, old_dfd, fake_filename);/' fs/namei.c
+              echo "susfs: applied set_nameidata() 3-arg workaround (dropped ', NULL')"
+            elif grep -q 'set_nameidata(nd, old_dfd, fake_filename);' fs/namei.c; then
+              echo "susfs: upstream patch already uses 3-arg set_nameidata() - no workaround needed"
+            else
+              echo "FATAL: SUSFS fs/namei.c OPEN_REDIRECT hunks did not apply"
+              exit 1
+            fi
           else
-            echo "FATAL: SUSFS fs/namei.c OPEN_REDIRECT hunks did not apply"
-            exit 1
+            if ! grep -q 'set_nameidata(nd, old_dfd, fake_filename' fs/namei.c; then
+              echo "FATAL: SUSFS fs/namei.c OPEN_REDIRECT hunks did not apply"
+              exit 1
+            fi
+            echo "susfs: native 4-arg set_nameidata() present (5.15+) - no workaround needed"
           fi
 
       - name: Set LOCALVERSION

@@ -154,10 +154,16 @@ jobs:
           # Workaround for upstream bug: the SUSFS patch calls the 5.15+
           # 4-arg set_nameidata() at three sites (do_tmpfile/do_o_path/
           # path_openat) while android12-5.10 keeps the 3-arg signature.
-          # Drop the trailing ", NULL"; no-op once upstream fixes it.
+          # Drop the trailing ", NULL".  Newer susfs4ksu gki-android12-5.10
+          # patches already use the 3-arg form directly, so accept both:
+          #   - 4-arg present  -> sed the workaround
+          #   - 3-arg present  -> already correct, nothing to do
+          #   - neither        -> OPEN_REDIRECT hunks really failed
           if grep -q 'set_nameidata(nd, old_dfd, fake_filename, NULL);' fs/namei.c; then
             sed -i 's/set_nameidata(nd, old_dfd, fake_filename, NULL);/set_nameidata(nd, old_dfd, fake_filename);/' fs/namei.c
             echo "susfs: applied set_nameidata() 3-arg workaround (dropped ', NULL')"
+          elif grep -q 'set_nameidata(nd, old_dfd, fake_filename);' fs/namei.c; then
+            echo "susfs: upstream patch already uses 3-arg set_nameidata() - no workaround needed"
           else
             echo "FATAL: SUSFS fs/namei.c OPEN_REDIRECT hunks did not apply"
             exit 1

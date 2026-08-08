@@ -36,6 +36,10 @@ on:
         description: 'SUSFS kernel patch branch (gki-android12-5.10 / gki-android13-5.15 ...)'
         type: string
         default: gki-android12-5.10
+      anykernel_branch:
+        description: 'AnyKernel3 installer branch (gki = 5.10 / gki-android13-5.15 = 5.15)'
+        type: string
+        default: gki
       kmi_symbol_check:
         description: 'Run KMI symbol validation'
         type: boolean
@@ -209,7 +213,7 @@ jobs:
         run: |
           ZIP_NAME="${{ inputs.kernel_name }}-${{ matrix.ksu }}-${{ matrix.clang }}"
           echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
-          git clone --depth=1 https://github.com/XTENSEI/GrayRavens-anykernel anykernel
+          git clone --depth=1 --branch ${{ inputs.anykernel_branch }} https://github.com/XTENSEI/GrayRavens-anykernel anykernel
           cp kernel/out/arch/arm64/boot/Image anykernel/Image
           cd anykernel
           zip -r9 "../${ZIP_NAME}.zip" . --exclude="*.git*" --exclude="README.md" --exclude="*.placeholder"

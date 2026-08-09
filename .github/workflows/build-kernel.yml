@@ -60,7 +60,13 @@ jobs:
           else
             echo 'ksu_variants=["${{ inputs.ksu_variant }}"]' >> "$GITHUB_OUTPUT"
           fi
-          if [ "${{ inputs.clang_variant }}" = "ALL" ]; then
+          # 5.15 kernel line only supports CLANG-19: the older CLANG-12
+          # toolchain produces a __stack_chk_fail KMI CRC mismatch against
+          # the ABI XML (toolchain-era artifact, not a real ABI break).
+          if [[ "${{ inputs.kernel_repo }}" == *5.15* ]] && [ "${{ inputs.clang_variant }}" != "CLANG-19" ]; then
+            echo "::warning::5.15 kernel line: CLANG-12 fails KMI on __stack_chk_fail; forcing CLANG-19"
+            echo 'clang_variants=["CLANG-19"]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.clang_variant }}" = "ALL" ]; then
             echo 'clang_variants=["CLANG-19","CLANG-12"]' >> "$GITHUB_OUTPUT"
           else
             echo 'clang_variants=["${{ inputs.clang_variant }}"]' >> "$GITHUB_OUTPUT"
@@ -161,7 +167,38 @@ jobs:
             exit 1
           fi
           cp "$PATCH_FILE" .
+          # 5.15.211 base fixup: the ACK tree carries vendor-hook includes
+          # (trace/hooks/blk.h in fs/namespace.c, trace/hooks/mm.h in
+          # fs/proc/task_mmu.c) that the upstream gki-android13-5.15 patch
+          # does not expect, so its first hunks reject.  Re-anchor those two
+          # context lines so the susfs include/declaration hunks land, then
+          # verify the resulting state (fail hard instead of shipping a
+          # broken KSUN build).
+          if [[ "${{ inputs.susfs_branch }}" == gki-android13-5.15* ]]; then
+            if ! grep -q '^#include <trace/hooks/blk.h>' fs/namespace.c || \
+               ! grep -q '^#include <trace/hooks/mm.h>' fs/proc/task_mmu.c; then
+              echo "FATAL: 5.15.211 SUSFS fixup: expected ACK vendor-hook includes missing"
+              exit 1
+            fi
+            awk '
+              /^diff --git a\// { in_ns = ($0 ~ /fs\/namespace\.c/); in_tm = ($0 ~ /fs\/proc\/task_mmu\.c/) }
+              in_ns && /^ #include "internal.h"$/ { print; print " #include <trace/hooks/blk.h>"; next }
+              in_tm && /^ #include <linux\/pkeys.h>$/ { print; print " #include <trace/hooks/mm.h>"; next }
+              { print }
+            ' "$(basename "$PATCH_FILE")" > "$(basename "$PATCH_FILE").tmp" && mv "$(basename "$PATCH_FILE").tmp" "$(basename "$PATCH_FILE")"
+            echo "susfs: applied 5.15.211 vendor-hook context fixup"
+          fi
           patch -p1 < "$(basename "$PATCH_FILE")" || true
+
+          # Post-apply verification for 5.15: the namespace/task_mmu susfs
+          # hunks must have landed (bootconfig.c rejection is expected).
+          if [[ "${{ inputs.susfs_branch }}" == gki-android13-5.15* ]]; then
+            if ! grep -q 'susfs_is_sdcard_android_data_not_decrypted' fs/namespace.c || \
+               ! grep -q 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/proc/task_mmu.c; then
+              echo "FATAL: SUSFS 5.15 namespace/task_mmu hunks did not apply after fixup"
+              exit 1
+            fi
+          fi
 
           # A failed hunk in fs/proc/bootconfig.c is EXPECTED: kaguya's
           # in-tree bootconfig spoof rewrote that file, so the SUSFS

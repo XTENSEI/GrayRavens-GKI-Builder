@@ -167,35 +167,41 @@ jobs:
             exit 1
           fi
           cp "$PATCH_FILE" .
+          patch -p1 < "$(basename "$PATCH_FILE")" || true
+
           # 5.15.211 base fixup: the ACK tree carries vendor-hook includes
           # (trace/hooks/blk.h in fs/namespace.c, trace/hooks/mm.h in
           # fs/proc/task_mmu.c) that the upstream gki-android13-5.15 patch
-          # does not expect, so its first hunks reject.  Re-anchor those two
-          # context lines so the susfs include/declaration hunks land, then
-          # verify the resulting state (fail hard instead of shipping a
-          # broken KSUN build).
+          # does not expect, so its FIRST hunk in each of those files rejects
+          # and they end up missing the susfs_def.h include (and, for
+          # namespace.c, the susfs externs/CL_COPY_MNT_NS define).  All other
+          # hunks apply cleanly.  Add the missing pieces deterministically;
+          # every insert is grep-guarded so an upstream patch fix is a no-op.
           if [[ "${{ inputs.susfs_branch }}" == gki-android13-5.15* ]]; then
             if ! grep -q '^#include <trace/hooks/blk.h>' fs/namespace.c || \
                ! grep -q '^#include <trace/hooks/mm.h>' fs/proc/task_mmu.c; then
               echo "FATAL: 5.15.211 SUSFS fixup: expected ACK vendor-hook includes missing"
               exit 1
             fi
-            awk '
-              /^diff --git a\// { in_ns = ($0 ~ /fs\/namespace\.c/); in_tm = ($0 ~ /fs\/proc\/task_mmu\.c/) }
-              in_ns && /^ #include "internal.h"$/ { print; print " #include <trace/hooks/blk.h>"; next }
-              in_tm && /^ #include <linux\/pkeys.h>$/ { print; print " #include <trace/hooks/mm.h>"; next }
-              { print }
-            ' "$(basename "$PATCH_FILE")" > "$(basename "$PATCH_FILE").tmp" && mv "$(basename "$PATCH_FILE").tmp" "$(basename "$PATCH_FILE")"
-            echo "susfs: applied 5.15.211 vendor-hook context fixup"
+            if ! grep -q '^#include <linux/susfs_def.h>' fs/namespace.c; then
+              awk '/^#include <linux\/mnt_idmapping.h>$/{print; print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"; print "#include <linux/susfs_def.h>"; print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"; next} {print}' fs/namespace.c > fs/namespace.c.tmp && mv fs/namespace.c.tmp fs/namespace.c
+            fi
+            if ! grep -q '^extern bool susfs_is_current_ksu_domain' fs/namespace.c; then
+              awk '/^#include "internal.h"$/{print; print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"; print "extern bool susfs_is_current_ksu_domain(void);"; print "extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;"; print ""; print "#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */"; print ""; print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"; next} {print}' fs/namespace.c > fs/namespace.c.tmp && mv fs/namespace.c.tmp fs/namespace.c
+            fi
+            if ! grep -q '^#include <linux/susfs_def.h>' fs/proc/task_mmu.c; then
+              awk '/^#include <linux\/pkeys.h>$/{print; print "#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)"; print "#include <linux/susfs_def.h>"; print "#endif // #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)"; next} {print}' fs/proc/task_mmu.c > fs/proc/task_mmu.c.tmp && mv fs/proc/task_mmu.c.tmp fs/proc/task_mmu.c
+            fi
+            echo "susfs: applied 5.15.211 missing-hunk fixup (susfs_def.h + externs)"
           fi
-          patch -p1 < "$(basename "$PATCH_FILE")" || true
 
-          # Post-apply verification for 5.15: the namespace/task_mmu susfs
-          # hunks must have landed (bootconfig.c rejection is expected).
+          # Post-apply verification for 5.15: the susfs code must have its
+          # declarations (bootconfig.c rejection is expected - kaguya covers it).
           if [[ "${{ inputs.susfs_branch }}" == gki-android13-5.15* ]]; then
             if ! grep -q 'susfs_is_sdcard_android_data_not_decrypted' fs/namespace.c || \
-               ! grep -q 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/proc/task_mmu.c; then
-              echo "FATAL: SUSFS 5.15 namespace/task_mmu hunks did not apply after fixup"
+               ! grep -q 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/proc/task_mmu.c || \
+               ! grep -q '^#include <linux/susfs_def.h>' fs/proc/task_mmu.c; then
+              echo "FATAL: SUSFS 5.15 namespace/task_mmu pieces missing after fixup"
               exit 1
             fi
           fi

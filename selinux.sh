@@ -36,18 +36,6 @@ ksu_allow(db, "untrusted_app", "gpu_device", "chr_file", "ioctl");\n\
 ksu_allow(db, "untrusted_app", "gpu_device", "chr_file", "map");\n'
 
 # ---------------------------------------------------------------------------
-# Iyashi / Kasumi — thermal performance management
-# Iyashi relaxes cooling device targets to hold a performance floor.
-# Kasumi dampens thermal_zone_get_temp() readings by a configurable offset.
-# Both read/write thermal zone sysfs nodes.
-# ---------------------------------------------------------------------------
-inject_selinux "Iyashi / Kasumi" \
-' ksu_allow(db, "kernel", "sysfs_therm", "dir", "search");\n\
-ksu_allow(db, "kernel", "sysfs_therm", "file", "read");\n\
-ksu_allow(db, "kernel", "sysfs_therm", "file", "write");\n\
-ksu_allow(db, "kernel", "sysfs_therm", "file", "open");\n'
-
-# ---------------------------------------------------------------------------
 # Selene - game detection reads /proc/<pid>/cmdline + /data/misc/selene list
 # ---------------------------------------------------------------------------
 inject_selinux "Selene" \
@@ -58,24 +46,6 @@ ksu_allow(db, "kernel", "misc_file", "dir", "search");\n\
 ksu_allow(db, "kernel", "misc_file", "file", "read");\n\
 ksu_allow(db, "kernel", "misc_file", "file", "open");\n\
 ksu_allow(db, "kernel", "misc_file", "file", "getattr");\n'
-
-# ---------------------------------------------------------------------------
-# Kaguya - safeprop usermodehelper execs /system/bin/sh + resetprop
-# ---------------------------------------------------------------------------
-inject_selinux "Kaguya" \
-' ksu_allow(db, "kernel", "shell_exec", "file", "execute_no_trans");\n\
-ksu_allow(db, "kernel", "system_file", "file", "execute_no_trans");\n\
-ksu_allow(db, "kernel", "system_file", "file", "read");\n\
-ksu_allow(db, "kernel", "system_file", "file", "open");\n\
-ksu_allow(db, "kernel", "system_file", "file", "getattr");\n\
-ksu_allow(db, "kernel", "magisk_exec", "file", "execute_no_trans");\n\
-ksu_allow(db, "kernel", "magisk_exec", "file", "read");\n\
-ksu_allow(db, "kernel", "magisk_exec", "file", "open");\n\
-ksu_allow(db, "kernel", "magisk_exec", "file", "getattr");\n\
-ksu_allow(db, "kernel", "ksu_exec", "file", "execute_no_trans");\n\
-ksu_allow(db, "kernel", "ksu_exec", "file", "read");\n\
-ksu_allow(db, "kernel", "ksu_exec", "file", "open");\n\
-ksu_allow(db, "kernel", "ksu_exec", "file", "getattr");\n'
 
 # ---------------------------------------------------------------------------
 # Zenith - tunable dir under /sys/devices/system/cpu/cpufreq (sysfs_devices_system_cpu)

@@ -242,7 +242,13 @@ jobs:
           # -g<SHA>[-dirty]) stays under the kernel's 64-char utsrelease
           # limit.  Full branding lives in the zip name / kernel.string.
           KN="$(echo "${{ inputs.kernel_name }}" | cut -c1-24 | sed 's/-$//')"
-          LOCALVER="-${KN}-${{ matrix.ksu }}"
+          # Permissiver-KAIHO branch: keep the KAIHO marker in the release
+          # string (uname -r) even though it exceeds the 24-char cap.
+          if [[ "${{ inputs.kernel_ref }}" == *permissiver* ]]; then
+            LOCALVER="-${KN}-KAIHO-${{ matrix.ksu }}"
+          else
+            LOCALVER="-${KN}-${{ matrix.ksu }}"
+          fi
           printf '\nCONFIG_LOCALVERSION="%s"\n' "$LOCALVER" >> arch/arm64/configs/gki_defconfig
 
       - name: Run build.sh

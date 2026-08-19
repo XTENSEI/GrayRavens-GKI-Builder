@@ -148,6 +148,11 @@ jobs:
             fi
           fi
 
+      - name: KSUN 5.4 compat patches
+        if: matrix.ksu == 'KSUN' && needs.setup.outputs.is_5_4 == 'true'
+        working-directory: kernel
+        run: bash ../ksun-54-compat.sh
+
       - name: Apply SUSFS patches (KSUN only, skip for 5.4)
         if: matrix.ksu == 'KSUN' && needs.setup.outputs.is_5_4 != 'true'
         working-directory: kernel

@@ -37,9 +37,9 @@ on:
         type: string
         default: gki-android12-5.10
       anykernel_branch:
-        description: 'AnyKernel3 installer branch (gki = 5.10 / gki-android13-5.15 = 5.15)'
+        description: 'AnyKernel3 installer branch (android12-5.10 = 5.10 / android13-5.15 = 5.15)'
         type: string
-        default: gki
+        default: android12-5.10
       kmi_symbol_check:
         description: 'Run KMI symbol validation'
         type: boolean

@@ -27,19 +27,19 @@ on:
       kernel_ref:
         description: 'kernel branch / tag / SHA to build'
         type: string
-        default: android12-5.10-experimental
+        default: android13-5.15-experimental
       kernel_repo:
         description: 'Kernel repository (owner/repo) to build'
         type: string
-        default: XTENSEI/kernel_common_5.10
+        default: XTENSEI/kernel_common_5.15
       susfs_branch:
         description: 'SUSFS kernel patch branch (gki-android12-5.10 / gki-android13-5.15 ...)'
         type: string
-        default: gki-android12-5.10
+        default: gki-android13-5.15
       anykernel_branch:
         description: 'AnyKernel3 installer branch (android12-5.10 = 5.10 / android13-5.15 = 5.15)'
         type: string
-        default: android12-5.10
+        default: android13-5.15
       kmi_symbol_check:
         description: 'Run KMI symbol validation'
         type: boolean

@@ -69,7 +69,10 @@ jobs:
           fi
           echo "is_5_4=${IS_54}" >> "$GITHUB_OUTPUT"
 
-          if [[ "${{ inputs.kernel_repo }}" == *5.15* ]] && [ "${{ inputs.clang_variant }}" != "CLANG-19" ]; then
+          if [ "${IS_54}" = "true" ] && [ "${{ inputs.clang_variant }}" != "CLANG-12" ]; then
+            echo "::warning::5.4 kernel: CLANG-19 incompatible with atomic_lse.h; forcing CLANG-12"
+            echo 'clang_variants=["CLANG-12"]' >> "$GITHUB_OUTPUT"
+          elif [[ "${{ inputs.kernel_repo }}" == *5.15* ]] && [ "${{ inputs.clang_variant }}" != "CLANG-19" ]; then
             echo "::warning::5.15 kernel line: CLANG-12 fails KMI on __stack_chk_fail; forcing CLANG-19"
             echo 'clang_variants=["CLANG-19"]' >> "$GITHUB_OUTPUT"
           elif [ "${{ inputs.clang_variant }}" = "ALL" ]; then

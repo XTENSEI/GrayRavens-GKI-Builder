@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# GrayRavens GKI Kernel Build Script (android12-5.10 / android13-5.15)
+# GrayRavens GKI Kernel Build Script (android11-5.4)
 
 set -e
 
@@ -12,7 +12,7 @@ export ARCH=arm64
 export LLVM=1
 export LLVM_IAS=1
 export KBUILD_BUILD_USER="GrayRavens-Team"
-export KBUILD_BUILD_HOST="Zenithed-V14-Yukari"
+export KBUILD_BUILD_HOST="Zenithed-V1-Nova"
 
 # ── Clang toolchain ──────────────────────────────────────────────────────────
 if [ -z "$CLANG_PATH" ]; then
@@ -42,7 +42,7 @@ else
 fi
 
 # ── KCFLAGS ──────────────────────────────────────────────────────────────────
-export KCFLAGS="-w -march=armv8.2-a+crypto+fp16+dotprod -mtune=cortex-a55 \
+export KCFLAGS="-w \
   -fno-semantic-interposition \
   ${POLLY_FLAGS}"
 

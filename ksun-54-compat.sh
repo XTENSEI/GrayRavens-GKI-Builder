@@ -115,8 +115,12 @@ if [ -f "$RULES" ]; then
   cat > "$RULES" << 'ENDRULES'
 // SPDX-License-Identifier: GPL-2.0
 // Stubbed for Linux 5.4 -- selinux_state.policy does not exist.
+#include <linux/types.h>
 #include <linux/version.h>
 #include "klog.h"
+
+struct selinux_policy;
+struct selinux_policy *backup_sepolicy;
 
 void apply_kernelsu_rules(void)
 {

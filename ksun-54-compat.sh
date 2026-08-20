@@ -206,3 +206,15 @@ void ksu_selinux_hide_handle_post_fs_data(void) { }
 ENDSELHIDE
   echo "ksun-54-compat: stubbed $SELHIDE for 5.4"
 fi
+
+# --- Fix 9: add ksun_compat.h include for missing 5.4 symbols ---
+# path_umount, path_mount, seccomp_filter_release, etc. don't exist in 5.4.
+# The compat header in include/linux/ksun_compat.h provides shims.
+for f in drivers/kernelsu/feature/kernel_umount.c \
+         drivers/kernelsu/infra/su_mount_ns.c \
+         drivers/kernelsu/policy/app_profile.c; do
+  if [ -f "$f" ]; then
+    sed -i '1i #include <linux/ksun_compat.h>' "$f"
+    echo "ksun-54-compat: added ksun_compat.h to $f"
+  fi
+done

@@ -87,3 +87,13 @@ if [ -f "$ALLOWLIST" ]; then
   sed -i 's/TWA_RESUME/true/g; s/TWA_NO_RESUME/false/g' "$ALLOWLIST"
   echo "ksun-54-compat: patched $ALLOWLIST for 5.4 task_work API"
 fi
+
+# --- Fix 3: filter_count not in 5.4 struct seccomp ---
+# 5.4 seccomp struct only has mode + filter pointer, no filter_count.
+for f in drivers/kernelsu/policy/app_profile.c; do
+  if [ -f "$f" ]; then
+    sed -i '/atomic_set.*filter_count/d' "$f"
+    echo "ksun-54-compat: patched $f for 5.4 seccomp struct"
+  fi
+done
+fi

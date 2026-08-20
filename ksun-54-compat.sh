@@ -174,3 +174,12 @@ bool ksu_genfscon(struct policydb *db, const char *fn, const char *p, const char
 ENDSEPOL
   echo "ksun-54-compat: stubbed $SEPOLICY for 5.4"
 fi
+
+# --- Fix 7: dispatch.c needs sched/task.h for tasklist_lock + init_task ---
+# In 5.4, tasklist_lock and init_task are declared in sched/task.h,
+# not auto-included by sched.h.
+DISPATCH="drivers/kernelsu/supercall/dispatch.c"
+if [ -f "$DISPATCH" ]; then
+  sed -i '/#include <linux\/capability.h>/a #include <linux/sched/task.h>' "$DISPATCH"
+  echo "ksun-54-compat: patched $DISPATCH for 5.4 tasklist_lock"
+fi

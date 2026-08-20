@@ -131,3 +131,42 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 ENDRULES
   echo "ksun-54-compat: stubbed $RULES for 5.4"
 fi
+
+# --- Fix 6: sepolicy.c uses deep selinux_policy internals ---
+# filename_trans_key, filename_trans_datum, selinux_policy layout all changed.
+# Since rules.c is stubbed, sepolicy.c is never called. Stub it.
+SEPOLICY="drivers/kernelsu/selinux/sepolicy.c"
+if [ -f "$SEPOLICY" ]; then
+  cat > "$SEPOLICY" << 'ENDSEPOL'
+// SPDX-License-Identifier: GPL-2.0
+// Stubbed for Linux 5.4 -- selinux_policy internals incompatible.
+#include <linux/types.h>
+#include "ss/policydb.h"
+
+struct selinux_policy;
+
+struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
+{
+	return ERR_PTR(-ENOSYS);
+}
+void ksu_destroy_sepolicy(struct selinux_policy *orig) { }
+bool ksu_type(struct policydb *db, const char *n, const char *a) { return false; }
+bool ksu_attribute(struct policydb *db, const char *n) { return false; }
+bool ksu_permissive(struct policydb *db, const char *t) { return false; }
+bool ksu_enforce(struct policydb *db, const char *t) { return false; }
+bool ksu_typeattribute(struct policydb *db, const char *t, const char *a) { return false; }
+bool ksu_exists(struct policydb *db, const char *n) { return false; }
+bool ksu_allow(struct policydb *db, const char *s, const char *t, const char *c, const char *p) { return false; }
+bool ksu_deny(struct policydb *db, const char *s, const char *t, const char *c, const char *p) { return false; }
+bool ksu_auditallow(struct policydb *db, const char *s, const char *t, const char *c, const char *p) { return false; }
+bool ksu_dontaudit(struct policydb *db, const char *s, const char *t, const char *c, const char *p) { return false; }
+bool ksu_allowxperm(struct policydb *db, const char *s, const char *t, const char *c, const char *r) { return false; }
+bool ksu_auditallowxperm(struct policydb *db, const char *s, const char *t, const char *c, const char *r) { return false; }
+bool ksu_dontauditxperm(struct policydb *db, const char *s, const char *t, const char *c, const char *r) { return false; }
+bool ksu_type_transition(struct policydb *db, const char *s, const char *t, const char *c, const char *d, const char *o) { return false; }
+bool ksu_type_change(struct policydb *db, const char *s, const char *t, const char *c, const char *d) { return false; }
+bool ksu_type_member(struct policydb *db, const char *s, const char *t, const char *c, const char *d) { return false; }
+bool ksu_genfscon(struct policydb *db, const char *fn, const char *p, const char *c) { return false; }
+ENDSEPOL
+  echo "ksun-54-compat: stubbed $SEPOLICY for 5.4"
+fi

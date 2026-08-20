@@ -105,3 +105,29 @@ if [ -f "$SULOG" ]; then
   sed -i '/#include <linux\/minmax.h>/d' "$SULOG"
   echo "ksun-54-compat: patched $SULOG for 5.4 minmax.h"
 fi
+
+# --- Fix 5: selinux_state.policy does not exist in 5.4 ---
+# 5.4 struct selinux_state has .ss and .avc but no .policy or .policy_mutex.
+# KSUN's rules.c heavily manipulates selinux_policy internals.
+# Stub it out on 5.4 -- KSU root works, per-app SELinux profiles disabled.
+RULES="drivers/kernelsu/selinux/rules.c"
+if [ -f "$RULES" ]; then
+  cat > "$RULES" << 'ENDRULES'
+// SPDX-License-Identifier: GPL-2.0
+// Stubbed for Linux 5.4 -- selinux_state.policy does not exist.
+#include <linux/version.h>
+#include "klog.h"
+
+void apply_kernelsu_rules(void)
+{
+	pr_info("ksu: sepolicy rules disabled on 5.4 (incompatible internals)");
+}
+
+int handle_sepolicy(void __user *user_data, u64 data_len)
+{
+	pr_warn("ksu: sepolicy not supported on 5.4");
+	return -ENOSYS;
+}
+ENDRULES
+  echo "ksun-54-compat: stubbed $RULES for 5.4"
+fi

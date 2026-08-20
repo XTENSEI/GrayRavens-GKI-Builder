@@ -105,4 +105,3 @@ if [ -f "$SULOG" ]; then
   sed -i '/#include <linux\/minmax.h>/d' "$SULOG"
   echo "ksun-54-compat: patched $SULOG for 5.4 minmax.h"
 fi
-fi

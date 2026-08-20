@@ -82,18 +82,27 @@ echo "ksun-54-compat: patched $FILE for 5.4 fsnotify API"
 # --- Fix 2: TWA_RESUME not available in 5.4 ---
 # In 5.4, task_work_add() takes a bool, not enum task_work_notify_mode.
 # TWA_RESUME = true, TWA_NO_RESUME = false
-ALLOWLIST="drivers/kernelsu/policy/allowlist.c"
-if [ -f "$ALLOWLIST" ]; then
-  sed -i 's/TWA_RESUME/true/g; s/TWA_NO_RESUME/false/g' "$ALLOWLIST"
-  echo "ksun-54-compat: patched $ALLOWLIST for 5.4 task_work API"
-fi
+for f in drivers/kernelsu/policy/allowlist.c drivers/kernelsu/supercall/supercall.c; do
+  if [ -f "$f" ]; then
+    sed -i 's/TWA_RESUME/true/g; s/TWA_NO_RESUME/false/g' "$f"
+    echo "ksun-54-compat: patched $f for 5.4 task_work API"
+  fi
+done
 
 # --- Fix 3: filter_count not in 5.4 struct seccomp ---
 # 5.4 seccomp struct only has mode + filter pointer, no filter_count.
-for f in drivers/kernelsu/policy/app_profile.c; do
+for f in drivers/kernelsu/policy/allowlist.c drivers/kernelsu/policy/app_profile.c drivers/kernelsu/supercall/supercall.c; do
   if [ -f "$f" ]; then
     sed -i '/atomic_set.*filter_count/d' "$f"
     echo "ksun-54-compat: patched $f for 5.4 seccomp struct"
   fi
 done
+
+# --- Fix 4: linux/minmax.h missing in 5.4 ---
+# min/max macros are in linux/kernel.h on 5.4.
+SULOG="drivers/kernelsu/sulog/event.c"
+if [ -f "$SULOG" ]; then
+  sed -i '/#include <linux\/minmax.h>/d' "$SULOG"
+  echo "ksun-54-compat: patched $SULOG for 5.4 minmax.h"
+fi
 fi

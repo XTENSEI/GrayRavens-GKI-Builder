@@ -78,3 +78,12 @@ ENDOFFILE
 
 echo "$REST" >> "$FILE"
 echo "ksun-54-compat: patched $FILE for 5.4 fsnotify API"
+
+# --- Fix 2: TWA_RESUME not available in 5.4 ---
+# In 5.4, task_work_add() takes a bool, not enum task_work_notify_mode.
+# TWA_RESUME = true, TWA_NO_RESUME = false
+ALLOWLIST="drivers/kernelsu/policy/allowlist.c"
+if [ -f "$ALLOWLIST" ]; then
+  sed -i 's/TWA_RESUME/true/g; s/TWA_NO_RESUME/false/g' "$ALLOWLIST"
+  echo "ksun-54-compat: patched $ALLOWLIST for 5.4 task_work API"
+fi

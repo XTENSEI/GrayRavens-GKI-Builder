@@ -207,13 +207,15 @@ ENDSELHIDE
   echo "ksun-54-compat: stubbed $SELHIDE for 5.4"
 fi
 
-# --- Fix 9: add ksun_compat.h include for missing 5.4 symbols ---
-# path_umount, path_mount, seccomp_filter_release, etc. don't exist in 5.4.
-# The compat header in include/linux/ksun_compat.h provides shims.
-for f in drivers/kernelsu/feature/kernel_umount.c \
-         drivers/kernelsu/infra/su_mount_ns.c \
-         drivers/kernelsu/policy/app_profile.c; do
-  if [ -f "$f" ]; then
+# --- Fix 9: add ksun_compat.h to ALL KSUN .c files ---
+# Provides shims for: nofault functions, task_pgrp, task_session,
+# path_umount, path_mount, put_seccomp_filter, security_inode_init_security_anon
+find drivers/kernelsu/ -name '*.c' -type f | while read -r f; do
+  # Skip files we already stubbed entirely
+  case "$f" in
+    *selinux/rules.c|*selinux/sepolicy.c|*selinux_hide.c) continue ;;
+  esac
+  if ! grep -q 'ksun_compat.h' "$f" 2>/dev/null; then
     sed -i '1i #include <linux/ksun_compat.h>' "$f"
     echo "ksun-54-compat: added ksun_compat.h to $f"
   fi

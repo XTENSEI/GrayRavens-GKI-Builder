@@ -183,3 +183,26 @@ if [ -f "$DISPATCH" ]; then
   sed -i '/#include <linux\/capability.h>/a #include <linux/sched/task.h>' "$DISPATCH"
   echo "ksun-54-compat: patched $DISPATCH for 5.4 tasklist_lock"
 fi
+
+# --- Fix 8: selinux_hide.c uses selinux_state internals ---
+# status_lock, status_page, policy all missing in 5.4 struct selinux_state.
+SELHIDE="drivers/kernelsu/feature/selinux_hide.c"
+if [ -f "$SELHIDE" ]; then
+  cat > "$SELHIDE" << 'ENDSELHIDE'
+// SPDX-License-Identifier: GPL-2.0
+// Stubbed for Linux 5.4 -- selinux_state internals incompatible.
+#include <linux/version.h>
+#include "klog.h"
+#include "feature/selinux_hide.h"
+
+void ksu_selinux_hide_init(void)
+{
+	pr_info("ksu: selinux_hide disabled on 5.4");
+}
+void ksu_selinux_hide_exit(void) { }
+void ksu_selinux_hide_drop_backup_if_unused(void) { }
+void ksu_selinux_hide_handle_second_stage(void) { }
+void ksu_selinux_hide_handle_post_fs_data(void) { }
+ENDSELHIDE
+  echo "ksun-54-compat: stubbed $SELHIDE for 5.4"
+fi

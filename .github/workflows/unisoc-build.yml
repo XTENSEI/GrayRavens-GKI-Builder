@@ -144,10 +144,10 @@ jobs:
           export KCFLAGS="-w -fno-semantic-interposition ${POLLY_FLAGS}"
 
           # The vendor Makefile hardcodes -march=armv8.2-a+crypto+crc+lse
-          # which AOSP Clang 12 rejects as an unknown target CPU.
-          # Strip it — arch/arm64/Makefile handles flags correctly with LLVM=1.
-          sed -i 's/-march=armv8.2-a+crypto+crc+lse//; s/-mtune=cortex-a75//' Makefile
-          echo "Patched Makefile: removed -march/-mtune for LLVM compatibility"
+          # which AOSP Clang 12 rejects as unknown target CPU.
+          # Replace with -mcpu which Clang understands.
+          sed -i 's/-march=armv8.2-a+crypto+crc+lse -mtune=cortex-a75/-mcpu=cortex-a75/' Makefile
+          echo "Patched Makefile: replaced -march/-mtune with -mcpu for LLVM compatibility"
 
           echo "Generating unisoc_defconfig..."
           make O=out unisoc_defconfig

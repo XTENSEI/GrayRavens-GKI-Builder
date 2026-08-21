@@ -56,6 +56,17 @@ jobs:
         run: |
           git clone --depth=1 --branch "${{ inputs.kernel_ref }}" "https://github.com/${{ inputs.kernel_repo }}" kernel
 
+      - name: Apply KSU-Next 5.4 compat patches
+        working-directory: kernel
+        run: |
+          # The compat header (ksun_compat.h) is already in the vendor tree.
+          # Only need to run the compat script for fsnotify, seccomp, SELinux stubs.
+          if [ -f ../ksun-54-compat.sh ]; then
+            bash ../ksun-54-compat.sh
+          else
+            echo "WARNING: ksun-54-compat.sh not found — skipping compat patches"
+          fi
+
       - name: Run build.sh (vendor kernel variant)
         working-directory: kernel
         env:

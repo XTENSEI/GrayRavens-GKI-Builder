@@ -54,7 +54,7 @@ jobs:
 
       - name: Shallow-clone kernel source
         run: |
-          git clone --depth=1 --branch "${{ inputs.kernel_ref }}" "https://github.com/${{ inputs.kernel_repo }}" kernel
+          git clone --depth=1 --branch "${{ inputs.kernel_ref }}" "https://x-access-token:${{ github.token }}@github.com/${{ inputs.kernel_repo }}" kernel
 
       - name: Apply KSU-Next 5.4 compat patches
         working-directory: kernel

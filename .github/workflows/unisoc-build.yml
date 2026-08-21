@@ -149,11 +149,16 @@ jobs:
           sed -i 's/-march=armv8.2-a+crypto+crc+lse -mtune=cortex-a75/-mcpu=cortex-a75/' Makefile
           echo "Patched Makefile: replaced -march/-mtune with -mcpu for LLVM compatibility"
 
+          # AOSP Clang needs explicit --target for cross-compilation.
+          # The 5.4 vendor Makefile doesn't set this like newer kernels.
+          export CC="clang --target=aarch64-linux-gnu"
+          echo "CC=$CC"
+
           echo "Generating unisoc_defconfig..."
-          make O=out unisoc_defconfig
+          make O=out CC="$CC" unisoc_defconfig
 
           echo "Building kernel image..."
-          make -j$(nproc --all) O=out Image
+          make -j$(nproc --all) O=out CC="$CC" Image
 
           echo ""
           echo "=== Post-build verification ==="

@@ -56,22 +56,34 @@ jobs:
         run: |
           git clone --depth=1 --branch "${{ inputs.kernel_ref }}" "https://github.com/${{ inputs.kernel_repo }}" kernel
 
-      - name: Init KernelSU-Next submodule
+      - name: Init submodules
         working-directory: kernel
         run: |
           # The shallow clone doesn't fetch submodules.
-          # Clone pershoot/KernelSU-Next (the actual source we use)
-          # at the commit the submodule pointer references.
+          # Clone each one manually.
+
+          # KernelSU-Next → pershoot/KernelSU-Next
           KSUN_COMMIT=$(git ls-tree HEAD -- KernelSU-Next | awk '{print $3}')
-          echo "KernelSU-Next submodule commit: $KSUN_COMMIT"
+          echo "KernelSU-Next commit: $KSUN_COMMIT"
           rm -rf KernelSU-Next
           git clone --depth=1 https://github.com/pershoot/KernelSU-Next.git KernelSU-Next
           cd KernelSU-Next
           git fetch --depth=1 origin "$KSUN_COMMIT" 2>/dev/null || true
           git checkout "$KSUN_COMMIT" 2>/dev/null || echo "Using latest (shallow)"
           cd ..
-          ls -la KernelSU-Next/kernel/ | head -5
-          ls -la drivers/kernelsu
+          echo "KernelSU-Next OK: $(ls KernelSU-Next/kernel/Kconfig 2>/dev/null && echo 'Kconfig found' || echo 'Kconfig MISSING')"
+          echo "drivers/kernelsu: $(readlink drivers/kernelsu)"
+
+          # Baseband-guard → vc-teahouse/Baseband-guard
+          BBG_COMMIT=$(git ls-tree HEAD -- Baseband-guard | awk '{print $3}')
+          echo "Baseband-guard commit: $BBG_COMMIT"
+          rm -rf Baseband-guard
+          git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git Baseband-guard
+          cd Baseband-guard
+          git fetch --depth=1 origin "$BBG_COMMIT" 2>/dev/null || true
+          git checkout "$BBG_COMMIT" 2>/dev/null || echo "Using latest (shallow)"
+          cd ..
+          echo "Baseband-guard OK: $(ls Baseband-guard/Kconfig 2>/dev/null && echo 'Kconfig found' || echo 'Kconfig MISSING')"
 
       - name: Apply KSU-Next 5.4 compat patches
         working-directory: kernel

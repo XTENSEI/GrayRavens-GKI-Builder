@@ -340,7 +340,7 @@ jobs:
           MSG="$MSG\n${{ steps.artifacts.outputs.list }}"
           MSG="$MSG\n"
           MSG="$MSG\n🔗 Summary: ${{ steps.meta.outputs.run_url }}"
-          ESCAPED=$(echo -e "$MSG" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+          ESCAPED=$(printf "%b" "$MSG" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
             -d "{\"chat_id\": \"${TELEGRAM_CHAT}\", \"text\": ${ESCAPED}, \"parse_mode\": \"\"}"

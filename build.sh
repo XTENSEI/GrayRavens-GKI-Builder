@@ -97,6 +97,19 @@ echo "KCFLAGS: $KCFLAGS"
 echo "--- Kernel compile.h ---"
 cat out/include/generated/compile.h 2>/dev/null || echo "compile.h not found"
 
+echo "--- Branding / release string ---"
+REL=$(sed -n 's/^#define UTS_RELEASE "\(.*\)"$/\1/p' out/include/generated/utsrelease.h 2>/dev/null || true)
+HN=$(sed -n 's/^#define CONFIG_DEFAULT_HOSTNAME "\(.*\)"$/\1/p' out/include/generated/autoconf.h 2>/dev/null || true)
+UV=$(sed -n 's/^#define UTS_VERSION "\(.*\)"$/\1/p' out/include/generated/compile.h 2>/dev/null || true)
+UM=$(sed -n 's/^#define UTS_MACHINE "\(.*\)"$/\1/p' out/include/generated/compile.h 2>/dev/null || true)
+CB=$(sed -n 's/^#define LINUX_COMPILE_BY "\(.*\)"$/\1/p' out/include/generated/compile.h 2>/dev/null || true)
+CH=$(sed -n 's/^#define LINUX_COMPILE_HOST "\(.*\)"$/\1/p' out/include/generated/compile.h 2>/dev/null || true)
+echo "uname -r : ${REL:-<unknown>}"
+echo "uname -n : ${HN:-<unknown>}"
+echo "uname -a : Linux ${HN:-unknown} ${REL:-unknown} ${UV:-<no UTS_VERSION>} ${UM:-aarch64} GNU/Linux"
+echo "built by  : ${CB:-?}@${CH:-?}"
+grep -E "^CONFIG_LOCALVERSION=|^CONFIG_DEFAULT_HOSTNAME=" out/.config 2>/dev/null || true
+
 echo "=== Verification complete ==="
 
 # ── KMI validation ───────────────────────────────────────────────────────────

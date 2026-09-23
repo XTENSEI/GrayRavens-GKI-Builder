@@ -23,7 +23,7 @@ on:
       kernel_name:
         description: 'Kernel base name'
         type: string
-        default: GrayRavens-Zenithed
+        default: GrayRavens-Hyperion-Stable
       kernel_ref:
         description: 'kernel branch / tag / SHA to build'
         type: string

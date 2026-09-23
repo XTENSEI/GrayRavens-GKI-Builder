@@ -6,7 +6,7 @@ on:
       kernel_name:
         description: 'Kernel base name'
         type: string
-        default: GrayRavens-Zenithed
+        default: GrayRavens-Hyperion-Stable
       kernel_ref:
         description: 'kernel branch / tag / SHA to build'
         type: string
@@ -113,7 +113,7 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
           export KBUILD_BUILD_USER="GrayRavens-Team"
-          export KBUILD_BUILD_HOST="Zenithed-V1-Nova"
+          export KBUILD_BUILD_HOST="GrayRavens-Hyperion"
 
           if [ -z "$CLANG_PATH" ]; then
               echo "ERROR: CLANG_PATH is not set." >&2

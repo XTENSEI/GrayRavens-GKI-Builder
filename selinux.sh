@@ -40,6 +40,9 @@ ksu_allow(db, "priv_app", "proc", "file", "write");\
 ksu_allow(db, "platform_app", "proc", "file", "write");\
 ksu_allow(db, "untrusted_app", "proc", "file", "write");\
 ksu_allow(db, "hal_allocator_default", "proc", "file", "write");\
+ksu_allowxperm(db, "system_server", "proc", "file", "2700-2701");\
+ksu_allowxperm(db, "priv_app", "proc", "file", "2700-2701");\
+ksu_allowxperm(db, "platform_app", "proc", "file", "2700-2701");\
 '
 
 # nandswap: vendor service creates /data/nandswap/swapfile, drives /proc/nandswap.

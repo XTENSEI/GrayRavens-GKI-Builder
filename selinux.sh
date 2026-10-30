@@ -5,17 +5,24 @@
 
 SELINUX_RULES_C="drivers/kernelsu/selinux/rules.c"
 
-# Sanity check: skip if KernelSU isn't installed
+# Sanity check: skip if KernelSU isn't installed (VNL builds have no KSU tree).
 if [[ ! -f "$SELINUX_RULES_C" ]]; then
-    echo "selinux.sh: $SELINUX_RULES_C not found, skipping SELinux injection."
+    echo "selinux.sh: $SELINUX_RULES_C not found (VNL build?), OPLUS rules NOT injected."
     return 0
 fi
+
+sites_before=$(grep -c 'GrayRavens: .* SELinux rules applied' "$SELINUX_RULES_C" || true)
 
 inject_selinux() {
     local label="$1"
     local rules="$2"
+    local mark
+    # the pr_info marks the site so dmesg tells us whether the block ran.
+    # printf keeps a real backslash-n in the C string; sed eats a bare \n.
+    mark=$(printf 'pr_info("GrayRavens: %s SELinux rules applied\\\\n");' "$label")
     echo "Injecting ${label} SELinux rules..."
-    sed -i "/rcu_assign_pointer(selinux_state.policy, pol);/i ${rules}" \
+    sed -i "/rcu_assign_pointer(selinux_state.policy, pol);/i ${mark}\\
+${rules}" \
         "$SELINUX_RULES_C"
 }
 
@@ -69,3 +76,13 @@ ksu_allow(db, "init", "nandswap_file", "dir", "add_name");\
 ksu_allow(db, "vendor_init", "nandswap_file", "dir", "create");\
 ksu_allow(db, "vendor_init", "nandswap_file", "dir", "search");\
 '
+
+# The sed above rewrites two apply sites. If KernelSU moves them, skip nothing
+# silently: a green build that ships no rules is the bug we are fixing.
+sites_after=$(grep -c 'GrayRavens: .* SELinux rules applied' "$SELINUX_RULES_C" || true)
+if [ "${sites_after:-0}" -le "${sites_before:-0}" ]; then
+    echo "FATAL: selinux.sh: rules did not land in $SELINUX_RULES_C" >&2
+    echo "       the KSU apply hook changed, update the sed pattern" >&2
+    exit 1
+fi
+echo "selinux.sh: OPLUS rules injected at ${sites_after} apply site(s)"

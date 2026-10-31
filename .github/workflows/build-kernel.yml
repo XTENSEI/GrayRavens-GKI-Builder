@@ -44,6 +44,10 @@ on:
         description: 'Run KMI symbol validation'
         type: boolean
         default: false
+      telegram_chat_id:
+        description: 'Telegram chat id(s) for the build summary, comma separated'
+        type: string
+        default: '6285036972'
 
 jobs:
   setup:
@@ -334,7 +338,10 @@ jobs:
       - name: Send Telegram notification
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # The input default is the chat that gets the summaries; the secret is
+          # only a fallback for a dispatch that clears the input.
+          TELEGRAM_CHAT: ${{ inputs.telegram_chat_id }}
+          TELEGRAM_CHAT_FALLBACK: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           export K_NAME=$(cat <<'GRVEOF'
           ${{ inputs.kernel_name }}
@@ -416,28 +423,44 @@ jobs:
           print("message length: %d" % len(text))
 
           token = os.environ.get("TELEGRAM_TOKEN", "").strip()
-          chat = os.environ.get("TELEGRAM_CHAT", "").strip()
+          chats = (os.environ.get("TELEGRAM_CHAT", "").strip()
+                   or os.environ.get("TELEGRAM_CHAT_FALLBACK", "").strip())
+          chats = [c.strip() for c in chats.split(",") if c.strip()]
 
-          payload = json.dumps({
-              "chat_id": chat,
-              "text": text,
-              "parse_mode": "",
-              "disable_web_page_preview": True,
-          }).encode("utf-8")
+          if not token or not chats:
+              print("telegram: no token (%s) or no chat id (%s), skipping"
+                    % (bool(token), chats))
+              raise SystemExit(0)
 
-          req = urllib.request.Request(
-              "https://api.telegram.org/bot" + token + "/sendMessage",
-              data=payload,
-              headers={"Content-Type": "application/json"},
-          )
-          try:
-              with urllib.request.urlopen(req, timeout=30) as resp:
-                  print(resp.read().decode("utf-8"))
-          except urllib.error.HTTPError as e:
-              body = e.read().decode("utf-8", "replace")
-              print("Telegram API rejected the message: HTTP %s" % e.code)
-              print(body)
-              print("diagnostics: token_len=%d chat_len=%d chat_looks_numeric=%s"
-                    % (len(token), len(chat), chat.lstrip("-").isdigit()))
-              raise SystemExit(1)
+          failed = []
+          for chat in chats:
+              payload = json.dumps({
+                  "chat_id": chat,
+                  "text": text,
+                  "parse_mode": "",
+                  "disable_web_page_preview": True,
+              }).encode("utf-8")
+
+              req = urllib.request.Request(
+                  "https://api.telegram.org/bot" + token + "/sendMessage",
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      print("telegram: sent to %s" % chat)
+                      print(resp.read().decode("utf-8"))
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode("utf-8", "replace")
+                  print("Telegram API rejected chat %s: HTTP %s" % (chat, e.code))
+                  print(body)
+                  print("diagnostics: token_len=%d chat_len=%d chat_looks_numeric=%s"
+                        % (len(token), len(chat), chat.lstrip("-").isdigit()))
+                  failed.append(chat)
+              except urllib.error.URLError as e:
+                  print("telegram: chat %s unreachable: %s" % (chat, e.reason))
+                  failed.append(chat)
+
+          if failed:
+              raise SystemExit("telegram: delivery failed for %s" % ", ".join(failed))
           PYGRV

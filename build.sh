@@ -50,7 +50,10 @@ export KCFLAGS="-w -march=armv8.2-a+crypto+fp16+dotprod -mtune=cortex-a55 \
 if [ -f "selinux.sh" ]; then
     source ./selinux.sh
 else
-    echo "No selinux.sh found — skipping SELinux injection."
+    # selinux.sh itself skips (exit 0) when there is no KernelSU tree, so a
+    # missing file means the checkout is incomplete - do not ship no rules.
+    echo "FATAL: selinux.sh not found next to build.sh, refusing to build without its rules" >&2
+    exit 1
 fi
 
 # ── Generate kernel config ───────────────────────────────────────────────────

@@ -242,6 +242,7 @@ jobs:
           KMI_SYMBOL_CHECK: ${{ inputs.kmi_symbol_check }}
         run: |
           cp "$GITHUB_WORKSPACE/build.sh" .
+          cp "$GITHUB_WORKSPACE/selinux.sh" .
           chmod +x build.sh
           ./build.sh
 

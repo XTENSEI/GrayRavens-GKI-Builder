@@ -39,13 +39,32 @@ ksu_allow(db, "untrusted_app", "gpu_device", "chr_file", "ioctl");\
 ksu_allow(db, "untrusted_app", "gpu_device", "chr_file", "map");\
 '
 
-# The OPLUS proc nodes need no rule here: fs/proc/inode.c marks them
-# S_PRIVATE, so the LSM hooks skip them on every variant, VNL included.
+# sched_assist: /proc/oplus_scheduler/* carries the generic proc type, so an
+# enforcing policy denies every writer. The nirvatiadirge kernel marks the tree
+# fs-internal in fs/proc/inode.c and the rules below are inert there, but the
+# android12-5.10 experimental kernel does not, and this builder ships both.
+inject_selinux "OPLUS sched_assist" \
+' ksu_allow(db, "system_server", "proc", "file", "ioctl");\
+ksu_allow(db, "system_server", "proc", "file", "write");\
+ksu_allow(db, "priv_app", "proc", "file", "write");\
+ksu_allow(db, "platform_app", "proc", "file", "write");\
+ksu_allow(db, "untrusted_app", "proc", "file", "write");\
+ksu_allow(db, "hal_allocator_default", "proc", "file", "write");\
+ksu_allowxperm(db, "system_server", "proc", "file", "2700-2701");\
+ksu_allowxperm(db, "priv_app", "proc", "file", "2700-2701");\
+ksu_allowxperm(db, "platform_app", "proc", "file", "2700-2701");\
+'
 
-# nandswap: the vendor service creates /data/nandswap/swapfile, which the
-# kernel cannot mark private because it is an ordinary file on /data.
+# nandswap: the vendor service drives /proc/nandswap and creates
+# /data/nandswap/swapfile, which the kernel cannot mark private because it is
+# an ordinary file on /data.
 inject_selinux "OPLUS nandswap" \
-' ksu_allow(db, "nandswap", "nandswap_file", "dir", "create");\
+' ksu_allow(db, "nandswap", "nandswap_proc", "dir", "search");\
+ksu_allow(db, "nandswap", "nandswap_proc", "file", "open");\
+ksu_allow(db, "nandswap", "nandswap_proc", "file", "read");\
+ksu_allow(db, "nandswap", "nandswap_proc", "file", "write");\
+ksu_allow(db, "nandswap", "nandswap_proc", "file", "getattr");\
+ksu_allow(db, "nandswap", "nandswap_file", "dir", "create");\
 ksu_allow(db, "nandswap", "nandswap_file", "dir", "search");\
 ksu_allow(db, "nandswap", "nandswap_file", "dir", "write");\
 ksu_allow(db, "nandswap", "nandswap_file", "dir", "add_name");\

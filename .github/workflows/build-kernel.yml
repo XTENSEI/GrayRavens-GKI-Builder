@@ -13,13 +13,14 @@ on:
           - ALL
         default: KWS
       clang_variant:
-        description: 'Clang toolchain Selection'
+        description: 'Clang toolchain (CLANG-19 = Neutron 19, CLANG-12 = AOSP 12)'
         type: choice
         options:
           - CLANG-19
           - CLANG-12
+          - CLANG-19-AOSP
           - ALL
-        default: CLANG-19
+        default: ALL
       kernel_name:
         description: 'Kernel base name'
         type: string
@@ -67,9 +68,9 @@ jobs:
           # 5.15 kernel line only supports CLANG-19: the older CLANG-12
           # toolchain produces a __stack_chk_fail KMI CRC mismatch against
           # the ABI XML (toolchain-era artifact, not a real ABI break).
-          if [[ "${{ inputs.kernel_repo }}" == *5.15* ]] && [ "${{ inputs.clang_variant }}" != "CLANG-19" ]; then
-            echo "::warning::5.15 kernel line: CLANG-12 fails KMI on __stack_chk_fail; forcing CLANG-19"
-            echo 'clang_variants=["CLANG-19"]' >> "$GITHUB_OUTPUT"
+          if [[ "${{ inputs.kernel_repo }}" == *5.15* ]] && [ "${{ inputs.clang_variant }}" != "CLANG-19-AOSP" ]; then
+            echo "::warning::5.15 kernel line: CLANG-12 fails KMI on __stack_chk_fail; forcing AOSP CLANG-19 for ABI CRC parity"
+            echo 'clang_variants=["CLANG-19-AOSP"]' >> "$GITHUB_OUTPUT"
           elif [ "${{ inputs.clang_variant }}" = "ALL" ]; then
             echo 'clang_variants=["CLANG-19","CLANG-12"]' >> "$GITHUB_OUTPUT"
           else
@@ -98,8 +99,39 @@ jobs:
             python3 python3-pip python3-lxml git wget binutils zstd \
             pahole gcc-aarch64-linux-gnu
 
-      - name: Download Clang 19
+      - name: Cache Neutron Clang 19
         if: matrix.clang == 'CLANG-19'
+        id: cache-neutron-19
+        uses: actions/cache@v4
+        with:
+          path: ~/toolchain/neutron-clang-19
+          key: neutron-clang-19-10032024-x86_64
+
+      - name: Download Neutron Clang 19
+        if: matrix.clang == 'CLANG-19' && steps.cache-neutron-19.outputs.cache-hit != 'true'
+        run: |
+          # 10032024 is Neutron's clang 19.0.0git build; every later tag in
+          # the catalogue is clang 22/23.  The archive carries bin/, lib/ and
+          # its own binutils, so no separate GCC toolchain is needed.
+          curl -fL --retry 3 -o /tmp/neutron-clang.tar.zst \
+            "https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/10032024/neutron-clang-10032024.tar.zst"
+          mkdir -p ~/toolchain/neutron-clang-19
+          tar --zstd -xf /tmp/neutron-clang.tar.zst -C ~/toolchain/neutron-clang-19
+
+      - name: Verify Neutron Clang 19
+        if: matrix.clang == 'CLANG-19'
+        run: ~/toolchain/neutron-clang-19/bin/clang --version | head -n1
+
+      - name: Cache AOSP Clang r536225
+        if: matrix.clang == 'CLANG-19-AOSP'
+        id: cache-aosp-19
+        uses: actions/cache@v4
+        with:
+          path: ~/toolchain/aosp-r536225
+          key: aosp-clang-r536225-x86_64
+
+      - name: Download AOSP Clang r536225
+        if: matrix.clang == 'CLANG-19-AOSP' && steps.cache-aosp-19.outputs.cache-hit != 'true'
         run: |
           git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r536225.git ~/toolchain/aosp-r536225
 
@@ -119,7 +151,8 @@ jobs:
       - name: Export CLANG_PATH
         run: |
           case "${{ matrix.clang }}" in
-            CLANG-19) echo "CLANG_PATH=$HOME/toolchain/aosp-r536225" >> "$GITHUB_ENV" ;;
+            CLANG-19) echo "CLANG_PATH=$HOME/toolchain/neutron-clang-19" >> "$GITHUB_ENV" ;;
+            CLANG-19-AOSP) echo "CLANG_PATH=$HOME/toolchain/aosp-r536225" >> "$GITHUB_ENV" ;;
             CLANG-12) echo "CLANG_PATH=$HOME/toolchain/aosp-clang-r416183b" >> "$GITHUB_ENV" ;;
           esac
 
@@ -248,7 +281,14 @@ jobs:
 
       - name: Package with AnyKernel3
         run: |
-          ZIP_NAME="${{ inputs.kernel_name }}-${{ matrix.ksu }}-${{ matrix.clang }}"
+          # Name each artifact after the toolchain that produced it, so the
+          # AOSP 12 and Neutron 19 builds are told apart in the release list.
+          case "${{ matrix.clang }}" in
+            CLANG-19) CLANG_LABEL="CLANG-19-Neutron" ;;
+            CLANG-12) CLANG_LABEL="CLANG-12-AOSP" ;;
+            *) CLANG_LABEL="${{ matrix.clang }}" ;;
+          esac
+          ZIP_NAME="${{ inputs.kernel_name }}-${{ matrix.ksu }}-${CLANG_LABEL}"
           echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
           git clone --depth=1 --branch ${{ inputs.anykernel_branch }} https://github.com/XTENSEI/GrayRavens-anykernel anykernel
           cp kernel/out/arch/arm64/boot/Image anykernel/Image

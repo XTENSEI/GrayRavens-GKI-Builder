@@ -99,16 +99,6 @@ jobs:
             python3 python3-pip python3-lxml git wget binutils zstd \
             pahole gcc-aarch64-linux-gnu
 
-      - name: Install Neutron runtime deps
-        if: matrix.clang == 'CLANG-19'
-        run: |
-          # Neutron's binaries link libxml2.  Newer images only ship
-          # libxml2.so.16, so report what is available instead of guessing.
-          for pkg in libxml2t64 libxml2; do
-            sudo apt-get install -y --no-install-recommends "$pkg" || true
-          done
-          ldconfig -p | grep libxml2 || echo "no libxml2 soname in the linker cache"
-
       - name: Cache Neutron Clang 19
         if: matrix.clang == 'CLANG-19'
         id: cache-neutron-19
@@ -128,20 +118,20 @@ jobs:
           mkdir -p ~/toolchain/neutron-clang-19
           tar --zstd -xf /tmp/neutron-clang.tar.zst -C ~/toolchain/neutron-clang-19
 
-      - name: Verify Neutron Clang 19
+      - name: Prepare Neutron Clang 19
         if: matrix.clang == 'CLANG-19'
         run: |
           T=~/toolchain/neutron-clang-19/bin
-          bad=0
-          for tool in clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-strip llvm-objdump llvm-readelf; do
-            if out=$("$T/$tool" --version 2>&1); then
-              echo "ok   $tool: $(echo "$out" | head -n1)"
-            else
-              echo "FAIL $tool: $out"
-              bad=1
-            fi
-          done
-          exit $bad
+          "$T/clang" --version | head -n1
+          # Neutron's ld.lld is the only tool in the archive linked against
+          # libxml2.so.2, which current images no longer ship (they carry
+          # libxml2.so.16).  Keep Neutron's clang, the assembler and the
+          # binutils, and link with the runner's lld instead.
+          if ! "$T/ld.lld" --version >/dev/null 2>&1; then
+            sudo apt-get install -y --no-install-recommends lld
+            ln -sf "$(command -v ld.lld)" "$T/ld.lld"
+          fi
+          "$T/ld.lld" --version | head -n1
 
       - name: Cache AOSP Clang r536225
         if: matrix.clang == 'CLANG-19-AOSP'

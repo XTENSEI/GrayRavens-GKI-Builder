@@ -102,13 +102,12 @@ jobs:
       - name: Install Neutron runtime deps
         if: matrix.clang == 'CLANG-19'
         run: |
-          # Neutron's ld.lld links libxml2, whose runtime package is named
-          # libxml2t64 from Ubuntu 24.04 on.  Try each name so the step works
-          # on both releases.
-          for pkg in libxml2t64 libxml2 libxml2-dev; do
-            sudo apt-get install -y --no-install-recommends "$pkg" && break
+          # Neutron's binaries link libxml2.  Newer images only ship
+          # libxml2.so.16, so report what is available instead of guessing.
+          for pkg in libxml2t64 libxml2; do
+            sudo apt-get install -y --no-install-recommends "$pkg" || true
           done
-          ldconfig -p | grep -q 'libxml2\.so\.2' || { echo "FATAL: libxml2.so.2 is missing"; exit 1; }
+          ldconfig -p | grep libxml2 || echo "no libxml2 soname in the linker cache"
 
       - name: Cache Neutron Clang 19
         if: matrix.clang == 'CLANG-19'
@@ -132,8 +131,17 @@ jobs:
       - name: Verify Neutron Clang 19
         if: matrix.clang == 'CLANG-19'
         run: |
-          ~/toolchain/neutron-clang-19/bin/clang --version | head -n1
-          ~/toolchain/neutron-clang-19/bin/ld.lld --version | head -n1
+          T=~/toolchain/neutron-clang-19/bin
+          bad=0
+          for tool in clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-strip llvm-objdump llvm-readelf; do
+            if out=$("$T/$tool" --version 2>&1); then
+              echo "ok   $tool: $(echo "$out" | head -n1)"
+            else
+              echo "FAIL $tool: $out"
+              bad=1
+            fi
+          done
+          exit $bad
 
       - name: Cache AOSP Clang r536225
         if: matrix.clang == 'CLANG-19-AOSP'
